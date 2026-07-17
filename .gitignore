@@ -8,6 +8,7 @@ scheduler_creds.json
 *credentials*.json
 *token*.json
 *.key
+gemini_api_key.txt
 
 # Google / Windows metadata
 *.Zone.Identifier
