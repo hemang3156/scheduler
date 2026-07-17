@@ -10,6 +10,7 @@ scheduler_creds.json
 *.key
 gemini_api_key.txt
 data/API_tokens_values/
+data/export/
 
 # Google / Windows metadata
 *.Zone.Identifier
@@ -45,6 +46,7 @@ exports/
 *.csv
 *.xlsx
 *.jsonl
+data/export/
 
 # Logs
 *.log
