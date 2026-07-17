@@ -1,0 +1,7 @@
+scheduler calender_id(where events will be created)- 3989d0a8d8e557a63765a2bc13cc023ad8561fbc974aafe3372650f879a13cd0@group.calendar.google.com
+
+main calender_id(where events will be extracted from)- hemug67@gmail.com
+
+client id= 776620778108-uj4u9n1oiaod9cb8qe8bhtrqjiucjk7o.apps.googleusercontent.com
+
+client secret = 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

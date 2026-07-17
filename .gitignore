@@ -1,4 +1,52 @@
+
+# Secrets / credentials
+.env
+.env.*
+credentials.json
+token.json
+scheduler_creds.json
+*credentials*.json
+*token*.json
+*.key
+
+# Google / Windows metadata
+*.Zone.Identifier
+*:Zone.Identifier
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local editor/app state
 .obsidian/app.json
 .obsidian/appearance.json
 .obsidian/core-plugins.json
 .obsidian/workspace.json
+
+
+# Generated data outputs
+outputs/
+exports/
+*.csv
+*.xlsx
+*.jsonl
+
+# Logs
+*.log
+
+# OS clutter
+.DS_Store
+Thumbs.db

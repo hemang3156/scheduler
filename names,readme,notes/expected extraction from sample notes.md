@@ -39,7 +39,7 @@ extraction format for:
   {
     "title": "Call babaji",
     "event_type": "fixed_time",
-    "anchor_datetime": null,
+    "anchor_datetime": "2026-07-16T23:59",
     "estimated_duration": null,
     "lock_status": "movable"
   },
