@@ -1,0 +1,15 @@
+- quick sync with Riya tmrw 3:30pm, 20 min
+- submit DBMS assignment by Sunday night
+- dentist appointment Aug 3 at 11 am
+- study OS scheduling chapter this Fri 7pm for 90 mins
+- buy printer ink
+- call Mom today or tmmrw morning
+- book train tickets before 25 July!!!
+- gym? maybe Wed evening, 1 hr
+- project demo with team 22nd Aug - 10:00 AM sharp
+- revise graphs this weekend
+- pay electricity bill due on the 20th
+- coffee with Arjun sometime next week
+- prepare slides for Monday's client call
+- renew passport application by EOD today
+- follow up with landlord after 6pm tomorrow

@@ -1,0 +1,7 @@
+- SOP meet 15th aug-5pm
+- sankalp meet 10th aug-8pm
+- exam prep 13th aug- DSA- 9pm
+- weekly revise this saturday
+- call babaji(today or tmmrw)
+- trip plan
+- complete report by today please!!!!

@@ -1,0 +1,7 @@
+- ACE promotional layout meet 16th aug-6pm    
+- ML pipeline debug 17th aug- YOLO- 8pm
+- calisthenics routine this sunday
+- shoot YouTube banter vid (this weekend)
+- ask papa about schedule (today or tmmrw)
+- flute practice 30 mins
+- finish CCUS report by tomorrow please!!!!

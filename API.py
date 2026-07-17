@@ -18,21 +18,21 @@ def get_calendar_service():
     
     creds = None
     
-    if os.path.exists(os.path.join(script_dir, "token.json")):
-        creds = Credentials.from_authorized_user_file(os.path.join(script_dir, "token.json"), SCOPES)
+    if os.path.exists(os.path.join(script_dir, "data/API_tokens_values/token.json")):
+        creds = Credentials.from_authorized_user_file(os.path.join(script_dir, "data/API_tokens_values/token.json"), SCOPES)
     
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                os.path.join(script_dir, "credentials.json"),
+                os.path.join(script_dir, "data/API_tokens_values/credentials.json"),
                 SCOPES,
             )
         
         creds = flow.run_local_server(port=0)
     
-    with open(os.path.join(script_dir, "token.json"), "w") as token:
+    with open(os.path.join(script_dir, "data/API_tokens_values/token.json"), "w") as token:
             token.write(creds.to_json())
     
     return build("calendar", "v3", credentials=creds)
