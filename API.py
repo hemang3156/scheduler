@@ -29,12 +29,11 @@ def get_calendar_service():
                 os.path.join(script_dir, "data/API_tokens_values/credentials.json"),
                 SCOPES,
             )
-        
-        creds = flow.run_local_server(port=0)
-    
+            creds = flow.run_local_server(port=0)
+
     with open(os.path.join(script_dir, "data/API_tokens_values/token.json"), "w") as token:
-            token.write(creds.to_json())
-    
+        token.write(creds.to_json())
+        
     return build("calendar", "v3", credentials=creds)
 
 def list_events_today(service):
