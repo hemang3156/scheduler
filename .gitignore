@@ -7,10 +7,14 @@ token.json
 scheduler_creds.json
 *credentials*.json
 *token*.json
+client_secret*.json
 *.key
 gemini_api_key.txt
 data/API_tokens_values/
 data/export/
+processed_ids.json
+.uv-cache/
+CODEX.md
 
 # Google / Windows metadata
 *.Zone.Identifier

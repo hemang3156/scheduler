@@ -71,3 +71,8 @@ stay `fixed_time` or be treated more like flexible tasks.
 - Add a few more ambiguous note patterns to stress-test prompt behavior.
 - Decide how to classify call/reminder-style items with no real time attached.
 - Use this notebook output as the handoff input for the next scheduling stage.
+
+# model's structure
+
+- using importance and urgency as metrics and thinking of using weights formula like -- w1 x importance+w2 x urgency +w3 x importance x urgency
+- 
