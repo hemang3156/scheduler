@@ -11,10 +11,17 @@ client_secret*.json
 *.key
 gemini_api_key.txt
 data/API_tokens_values/
+data/clientJson/
 data/export/
 processed_ids.json
 .uv-cache/
 CODEX.md
+
+# Packaging
+dist/
+build/
+*.egg-info/
+
 
 # Google / Windows metadata
 *.Zone.Identifier

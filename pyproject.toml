@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autonomous-scheduler"
+version = "0.1.0"
+description = "Autonomous Calendar Scheduling Agent using Google Gemini & Google Calendar API"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Hemang" }
+]
+dependencies = [
+    "google-genai>=1.0.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth-oauthlib>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+scheduler = "src.interfaces.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "evals: Marks live LLM benchmark evaluation tests (deselect with -m 'not evals')"
+]
+
+

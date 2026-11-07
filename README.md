@@ -1,94 +1,244 @@
-# Autonomous Task & Calendar Scheduler
+# Autonomous Calendar Scheduling Agent
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Google Gemini API](https://img.shields.io/badge/LLM-Google%20Gemini%20API-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Google Calendar API](https://img.shields.io/badge/Integration-Google%20Calendar%20API-34A853?style=flat-square&logo=google-calendar&logoColor=white)](https://developers.google.com/calendar)
 [![OAuth 2.0](https://img.shields.io/badge/Auth-OAuth%202.0-orange?style=flat-square)](https://oauth.net/2/)
-[![Pandas](https://img.shields.io/badge/Data-Pandas-150458?style=flat-square&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
+[![uv](https://img.shields.io/badge/Packaging-uv-blueviolet?style=flat-square)](https://github.com/astral-sh/uv)
+[![pytest](https://img.shields.io/badge/Tests-47%20Passed-brightgreen?style=flat-square&logo=pytest&logoColor=white)](https://docs.pytest.org/)
 
-An intelligent automated personal scheduling assistant integrating **Google Gemini LLM** and the **Google Calendar API** to ingest unstructured natural language notes, parse them into strict schema-validated event and task records, classify priority and urgency, and programmatically merge them around immutable calendar commitments.
+An autonomous personal executive assistant built on AI Engineering principles ([roadmap.sh/ai-engineer](https://roadmap.sh/ai-engineer)). The system ingests informal, unstructured natural language notes, parses them into schema-validated task drafts, resolves scheduling conflicts around immutable calendar blocks using deterministic gap-finding, optimizes slot placement via a continuous 24-hour willingness gradient, evolves user preferences dynamically via LLM feedback, and renders an interactive schedule diff before committing changes to Google Calendar.
 
 ---
 
-## 🏗️ Architecture & Pipeline Flow
+## 1. System Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Ingestion ["1. Multi-Modal Ingestion"]
-        A[Google Calendar Ingestion\n(API.py / OAuth 2.0)] --> C[Normalized Calendar Events\nCSV_1]
-        B[Informal Notes & Tasks\n(Markdown / Plaintext)] --> D[Prompt Template +\nGemini LLM Extraction]
+    subgraph Ingestion ["1. Natural Language Ingestion"]
+        A["Informal Notes / CLI Input\n('Guitar practice 8pm')"] --> B["Gemini Structured Extractor\n(src/agent/scorer.py)"]
+        B --> C["Pydantic ScoredTask Drafts\n(title, importance, urgency, anchor, duration)"]
     end
 
-    subgraph Structuring ["2. Structured Parsing & Validation"]
-        D --> E[JSON Schema Validation\ntitle, event_type, start, end, duration, importance, urgency]
-        E --> F[Deterministic Fallback Extractor\n(notes_extractor.py)]
-        F --> G[Extracted Task Records\nCSV_2]
+    subgraph CalendarState ["2. Calendar & Free Gap Retrieval"]
+        D["Google Calendar v3 API\n(OAuth2 Auto-Refresh)"] --> E["CalendarClient\n(src/tools/calender_client.py)"]
+        E --> F["Timeline Sweep Gap Finder\n(src/tools/gap_finder.py)"]
+        F --> G["Available TimeSlots\n(Interval Merged & Buffer Deducted)"]
     end
 
-    subgraph Optimization ["3. Conflict Resolution & Merging"]
-        C & G --> H[Conflict Resolution Engine]
-        H --> I{Is Task Movable?}
-        I -- Locked / Fixed --> J[Anchor to Strict Time Slot]
-        I -- Movable --> K[Fit Around Immutable Calendar Blocks]
+    subgraph Optimization ["3. Deterministic Gradient Optimizer"]
+        C & G --> H["Priority & Quality Engine\n(src/core/optimizer.py)"]
+        I["24-Hour Willingness Profile W(t)\n(data/preference_profiles/)"] --> H
+        H --> J{"Movable vs Fixed?"}
+        J -- "Fixed / Synchronized" --> K["Carve Strict Anchor Slot"]
+        J -- "Flexible / Movable" --> L["Score Gaps by Willingness & Proximity"]
+        K & L --> M["Deterministic SchedulePlan"]
     end
 
-    subgraph Execution ["4. Calendar Synchronization"]
-        J & K --> L[Schedule Review & Verification]
-        L --> M[Write Back to Google Calendar API]
+    subgraph Delivery ["4. Presentation & Continuous Learning"]
+        M --> N["Interactive Terminal Schedule Diff\n(src/agent/scheduler_agent.py)"]
+        N --> O{"User Confirm [y/N]"}
+        O -- "Confirmed" --> P["Write to Google Calendar"]
+        P --> Q["LLM Preference Curve Evolution\n(src/agent/curve_updater.py)"]
+        O -- "Aborted" --> R["No Calendar Writes"]
     end
 ```
 
 ---
 
-## ✨ Core Features
+## 2. Core Mathematical Formulations
 
-1. **Natural Language Notes Parsing:** Extracts tasks, lectures, meetings, routines, and evaluative deadlines from conversational, ambiguous notes using structured Gemini prompts.
-2. **Deterministic Fallback Pipeline:** Includes standalone rule-based extraction (`notes_extractor.py`) to parse anchor times, duration estimates, and lock statuses without requiring network calls or LLM tokens during local testing.
-3. **Multi-Dimensional Prioritization:** Evaluates tasks across **Importance (1–5)** and **Urgency (1–5)** metrics, incorporating weighted ranking formulas ($w_1 \cdot \text{importance} + w_2 \cdot \text{urgency} + w_3 \cdot [\text{importance} \times \text{urgency}]$) for schedule placement.
-4. **Bidirectional Calendar Sync:** Authenticates securely via OAuth 2.0 to fetch real-time calendar agendas and post optimized schedules back to Google Calendar.
-5. **Architectural Blueprint:** Detailed pipeline milestone logs and design specifications are documented in [`progress_report.md`](progress_report.md) and [`names,readme,notes/`](names,readme,notes/).
+### Multi-Dimensional Priority Scoring
+Every ingested task is rated across **Importance** ($\text{imp} \in [1, 5]$) and **Urgency** ($\text{urg} \in [1, 5]$). The placement priority score $S_{\text{priority}}$ is computed deterministically:
 
----
+$S_{\text{priority}} = w_1 \cdot \text{imp} + w_2 \cdot \text{urg} + w_3 \cdot (\text{imp} \times \text{urg})$
 
-## 📂 Repository Layout
+Where default weights are $w_1 = 0.40$, $w_2 = 0.40$, and $w_3 = 0.20$. Fixed unmovable commitments (e.g., lectures, synchronous meetings) receive an overriding priority boost to guarantee calendar anchoring.
 
-- `API.py`: Google Calendar API authentication, event retrieval, and event creation service.
-- `notes_extractor.py`: Deterministic rule-based extraction baseline for offline testing.
-- `data_processing.ipynb`: Notebook for importing, cleaning, and normalizing calendar events.
-- `notes_to_data.ipynb`: Notebook for LLM-backed notes extraction and DataFrame export.
-- `email_forwarder.py`: Starred email ingestion and task forwarding utility with rate-limiting and backoff.
-- `data/import/`: Source notes, prompts (`extraction_prompt_template.md`), and expected extraction samples.
-- `names,readme,notes/`: Design diagrams, phase specifications, and classifier notes.
+### Continuous 24-Hour Willingness Gradient
+Rather than enforcing brittle, binary working hours that break for irregular schedules (e.g. night routines, odd-hour study sessions), user availability is modeled as a continuous 24-hour gradient curve:
 
----
+$W(t) \in [0.0, 1.0] \quad \text{for } t \in \{0, 1, \dots, 23\}$
 
-## 🚀 Setup & Execution
+Standard daytime hours receive higher willingness weights ($0.7 - 0.9$), while late-night hours (e.g., 3:00 AM) are assigned small non-zero weights ($0.05$) rather than being hard forbidden. If a calendar is packed, tasks gracefully spill into lower-willingness hours without throwing unplaced errors.
 
-### 1. Environment Setup
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt  # or install google-api-python-client google-auth-httplib2 google-auth-oauthlib pandas
-```
+### Slot Placement Quality with Anchor Proximity
+When fitting a movable task into an available gap $[t_{\text{start}}, t_{\text{end}}]$, candidate placement hours are scored based on willingness combined with distance from any requested time anchor:
 
-### 2. Google Calendar OAuth
-Place your Google Cloud OAuth client secret in `credentials.json` (gitignored). On the first run:
-```bash
-python API.py
-```
-This launches a local OAuth flow and saves your authorized token to `token.json`.
+$Q_{\text{slot}} = W[h] \cdot \left(1.0 - \min\left(1.0, \frac{\Delta t_{\text{hours}}}{12}\right)\right)$
 
-### 3. Run Offline Deterministic Extractor
-```bash
-python notes_extractor.py "names,readme,notes/Phase 2(sample notes).md" --reference-date 2026-07-16
-```
+Where:
+- $W[h]$ is the willingness weight for the candidate starting hour $h$.
+- $\Delta t_{\text{hours}} = |h - h_{\text{anchor}}|$ is the temporal distance from the user's preferred time.
 
-### 4. Run Unit Tests
-```bash
-python -m unittest discover -s tests -v
-```
+### Continuous Preference Learning via LLM
+Upon event creation, Gemini evaluates the placed event alongside the existing 24-hour curve and adjusts hourly preferences. All outputs are sanitized and clamped programmatically to prevent drift:
+
+$W_{\text{updated}}[h] = \max(0.0, \min(1.0, W_{\text{raw}}[h]))$
 
 ---
 
-## 📄 License & Attribution
-Designed and engineered by [Hemang Garg](https://github.com/hemang3156).
+## 3. Directory Layout
+
+```
+scheduler/
+├── pyproject.toml              # Build backend (hatchling), dependencies, and CLI entry point
+├── requirements.txt            # Dependency manifest for pip users
+├── data/
+│   ├── daily_notes.md          # Active daily markdown scratchpad for informal notes
+│   ├── preference_profiles/    # JSON stores for hourly willingness curves (W[0..23])
+│   │   └── global_baseline.json
+│   └── export/
+│       └── response.json       # Structured fallback task fixtures
+│
+├── src/
+│   ├── core/                   # Pure Domain Logic (Zero external network/SDK imports)
+│   │   ├── models.py           # Dataclasses, Pydantic extraction schemas, enums
+│   │   ├── exceptions.py       # CalendarError, CalendarAuthError hierarchy
+│   │   ├── scoring.py          # Priority formula implementation
+│   │   ├── optimizer.py        # Gap allocation, slot carving, willingness scoring
+│   │   └── preference_engine.py# Profile loading, sanitization, and baseline updates
+│   │
+│   ├── tools/                  # External Adapters
+│   │   ├── calender_client.py  # Google Calendar API v3 client (OAuth2 auto-refresh)
+│   │   └── gap_finder.py       # Sweep-line free slot interval-merging algorithm
+│   │
+│   ├── agent/                  # LLM Orchestration
+│   │   ├── scorer.py           # Gemini structured task extraction & scoring
+│   │   ├── curve_updater.py    # LLM willingness curve evolution
+│   │   ├── prompt_templates.py # Safe brace-isolated prompt builders
+│   │   └── scheduler_agent.py  # AutonomousScheduler coordinator & diff formatter
+│   │
+│   └── interfaces/             # Presentation Layer
+│       └── cli.py              # Interactive CLI with dry-run and sync confirmation
+│
+└── tests/
+    ├── conftest.py             # Reusable pytest fixtures and eval markers
+    ├── test_gap_finder.py      # Boundary clipping, overlap merging, buffer deduction
+    ├── test_models.py          # Data contract integrity and schema validation
+    ├── test_scoring.py         # Priority weight bounds and sorting
+    ├── test_optimizer.py       # Slot carving, deadline constraints, gradient placement
+    ├── test_preference_engine.py # Profile persistence and float clamping
+    ├── test_curve_updater.py   # Curve evolution prompt builders and mock updates
+    ├── test_scheduler_agent.py # Plan generation and diff rendering
+    ├── test_cli.py             # CLI argument parsing, date flags, and execution flow
+    ├── test_evals.py           # Live LLM regression benchmark test harness
+    └── data/
+        └── synthetic_notes_dataset.json # 16 synthetic real-world edge cases
+```
+
+---
+
+## 4. Setup & Authentication
+
+### Prerequisites
+- Python 3.11+
+- [uv](https://github.com/astral-sh/uv) (recommended) or `pip`
+
+### Step 1: Install Dependencies
+```bash
+# Using uv (fastest)
+uv sync --extra dev
+
+# Or using pip
+pip install -r requirements.txt
+```
+
+### Step 2: Configure Google Calendar OAuth 2.0
+1. Create a project in the [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable the **Google Calendar API**.
+3. Configure the **OAuth Consent Screen** (add scopes: `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/calendar.readonly`).
+4. Create **OAuth 2.0 Client IDs** (Application type: *Desktop application*).
+5. Download the credentials JSON file and save it in the repository root as `credentials.json`.
+6. On first execution, the client prompts your browser for one-time OAuth consent and caches the credentials in `token.json` with automatic token refresh.
+
+### Step 3: Configure Gemini API Key
+Provide your Gemini API key through either:
+```bash
+# Option A: Environment variable
+export GEMINI_API_KEY="your-api-key-here"
+
+# Option B: Plaintext file in project root
+echo "your-api-key-here" > gemini_api_key.txt
+```
+
+---
+
+## 5. Usage & CLI Workflows
+
+The `scheduler` CLI supports multiple invocation modes:
+
+### Quick Command-Line Scheduling
+Schedule a task directly from your terminal:
+```bash
+# Preview placement without touching your calendar (Dry Run)
+scheduler "Guitar practice 8pm" --dry-run
+
+# Commit and sync to Google Calendar with interactive confirmation [y/N]
+scheduler "Guitar practice 8pm" --sync
+```
+
+### Daily Notes Scratchpad Scheduling
+Write multi-line informal tasks into `data/daily_notes.md`:
+```markdown
+- [ ] Review PR architecture 45m by 3pm
+- [ ] Team sync with Rohan 30m at 4pm
+- [ ] Complete calculus assignment 2 hours
+```
+Execute the scheduler without arguments to ingest `data/daily_notes.md` automatically:
+```bash
+scheduler --sync
+```
+
+### Scheduling for Tomorrow or Specific Dates
+```bash
+# Schedule tasks for tomorrow
+scheduler "Gym workout 7am" --tomorrow --dry-run
+
+# Schedule tasks for a specific calendar date
+scheduler "Dentist appointment 11am" --date 2026-11-15 --sync
+```
+
+### CLI Options Reference
+| Flag | Description | Default |
+|---|---|---|
+| `note_words` | Direct note string directly on command line | None |
+| `-n, --notes PATH` | Path to markdown file, text file, or response.json | `data/daily_notes.md` |
+| `--raw-text TEXT` | Raw unstructured notes string | None |
+| `--date YYYY-MM-DD` | Target date for schedule planning | Today |
+| `--tomorrow` | Target tomorrow's calendar window | False |
+| `--start-hour INT` | Daily start hour in 24h format | `9` (09:00) |
+| `--end-hour INT` | Daily end hour in 24h format | `21` (21:00) |
+| `--buffer INT` | Buffer minutes between placed tasks | `5` |
+| `--dry-run` | Offline preview mode; skips live calendar fetch | False |
+| `--sync` | Prompts for human `[y/N]` confirmation to sync | False |
+
+---
+
+## 6. Testing & Evaluation Benchmark
+
+### 1. Deterministic Unit Tests (Offline)
+47 offline unit tests verify domain data contracts, interval merging, slot carving, willingness gradient selection, and CLI parsing in under 2 seconds:
+```bash
+uv run --extra dev pytest -m "not evals" -v
+```
+
+### 2. Live LLM Regression Evaluation Benchmark
+A dedicated benchmark suite evaluates Gemini's extraction accuracy against 16 synthetic real-world edge cases ([`tests/data/synthetic_notes_dataset.json`](tests/data/synthetic_notes_dataset.json)):
+```bash
+uv run --extra dev pytest -s tests/test_evals.py
+```
+
+Benchmark targets and verified accuracy:
+| Metric | Benchmark Target | Measured Accuracy |
+|---|---|---|
+| **Event Type Classification** | $\ge 80.0\%$ | **93.8%** |
+| **Mobility Classification (`is_movable`)** | $\ge 80.0\%$ | **100.0%** |
+| **Duration Calibration** | $\ge 80.0\%$ | **100.0%** |
+| **Start Hour Anchor Extraction** | $\ge 80.0\%$ | **100.0%** |
+
+---
+
+## 7. Security & Credentials
+- All secrets (`credentials.json`, `token.json`, `gemini_api_key.txt`, `data/clientJson/`) are explicitly excluded via `.gitignore`.
+- Domain modules under `src/core/` are isolated from external networks to ensure testability and prevent unintended side effects.

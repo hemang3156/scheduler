@@ -1,0 +1,122 @@
+[
+  {
+    "id": "case_01_lecture",
+    "raw_note": "CS F211 Principles of Programming Languages lecture at 10am",
+    "expected_type": "lecture",
+    "expected_movable": false,
+    "expected_start_hour": 10,
+    "min_duration": 50,
+    "max_duration": 120
+  },
+  {
+    "id": "case_02_mentor_meeting",
+    "raw_note": "One on one sync with thesis mentor at 4pm for 30m",
+    "expected_type": "meeting",
+    "expected_movable": false,
+    "expected_start_hour": 16,
+    "expected_duration": 30
+  },
+  {
+    "id": "case_03_report_deadline",
+    "raw_note": "Finish CCUS carbon capture report due tomorrow by 23:59",
+    "expected_type": "evaluative",
+    "expected_movable": true,
+    "min_importance": 4,
+    "min_urgency": 4
+  },
+  {
+    "id": "case_04_viva_exam",
+    "raw_note": "Final lab viva examination at 11:30am",
+    "expected_type": "evaluative",
+    "expected_movable": false,
+    "expected_start_hour": 11,
+    "min_importance": 4
+  },
+  {
+    "id": "case_05_workout",
+    "raw_note": "Calisthenics workout routine 45 mins",
+    "expected_type": "routine",
+    "expected_movable": true,
+    "expected_duration": 45
+  },
+  {
+    "id": "case_06_flute_practice",
+    "raw_note": "Flute practice for 30 minutes",
+    "expected_type": "routine",
+    "expected_movable": true,
+    "expected_duration": 30
+  },
+  {
+    "id": "case_07_urgent_bugfix",
+    "raw_note": "Debug database connection timeout in production ASAP",
+    "expected_type": "others",
+    "expected_movable": true,
+    "min_urgency": 5,
+    "min_importance": 4
+  },
+  {
+    "id": "case_08_quick_call",
+    "raw_note": "Quick catchup call with papa 15m",
+    "acceptable_types": ["routine", "meeting"],
+    "expected_movable": true,
+    "expected_duration": 15
+  },
+  {
+    "id": "case_09_deep_debug_long",
+    "raw_note": "ML pipeline debug - YOLO training run 2 hours",
+    "expected_type": "others",
+    "expected_movable": true,
+    "expected_duration": 120
+  },
+  {
+    "id": "case_10_dentist",
+    "raw_note": "Dentist cleaning appointment at 3pm",
+    "acceptable_types": ["meeting", "routine"],
+    "expected_movable": false,
+    "expected_start_hour": 15
+  },
+  {
+    "id": "case_11_vague_someday",
+    "raw_note": "Learn Rust programming someday",
+    "expected_type": "others",
+    "expected_movable": true,
+    "max_importance": 3,
+    "max_urgency": 2
+  },
+  {
+    "id": "case_12_midterm_exam",
+    "raw_note": "Midterm exam in Hall C at 9am for 2 hours",
+    "expected_type": "evaluative",
+    "expected_movable": false,
+    "expected_start_hour": 9,
+    "expected_duration": 120
+  },
+  {
+    "id": "case_13_club_meeting",
+    "raw_note": "Robotics club core committee meeting 7pm",
+    "expected_type": "meeting",
+    "expected_movable": false,
+    "expected_start_hour": 19
+  },
+  {
+    "id": "case_14_research_reading",
+    "raw_note": "Read AlphaGenome paper for 1 hour",
+    "acceptable_types": ["routine", "others"],
+    "expected_movable": true,
+    "expected_duration": 60
+  },
+  {
+    "id": "case_15_slang_partner_workout",
+    "raw_note": "Gym session with Rohan at 6pm",
+    "acceptable_types": ["routine", "meeting"],
+    "expected_movable": false,
+    "expected_start_hour": 18
+  },
+  {
+    "id": "case_16_errand",
+    "raw_note": "Pick up dry cleaning before 8pm",
+    "acceptable_types": ["others", "routine"],
+    "expected_movable": true,
+    "max_importance": 3
+  }
+]

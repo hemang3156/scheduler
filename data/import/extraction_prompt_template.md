@@ -13,8 +13,7 @@ For each item, output exactly these fields:
   (YYYY-MM-DDTHH:MM), or null if no start date/time can be determined
 - "end": object containing "dateTime", an ISO 8601 local datetime
   (YYYY-MM-DDTHH:MM), or null if no end/due date/time can be determined
-- "estimated_duration": in minutes, or null. Never guess a duration. Only fill
-  this if the note explicitly states one.
+- "estimated_duration": in minutes (integer). Follow the rules for estimated_duration below.
 - "importance": integer from 1 to 5, where 1 = not important and 5 = very important
 - "urgency": integer from 1 to 5, where 1 = not urgent and 5 = very urgent
 
@@ -53,6 +52,17 @@ Rules for "start.dateTime" and "end.dateTime":
 - If an evaluative task is due on a date but no time is given, set
   "end.dateTime" to 23:59 on that date and leave "start.dateTime" as null.
 - If no date or time is mentioned or inferable, set both dateTime values to null.
+
+Rules for estimated_duration:
+- If the note explicitly mentions a duration (e.g., "30 mins", "1 hour", "15m"), convert it to minutes as an integer.
+- If no duration is explicitly stated, provide a realistic estimate in minutes based on the event_type and title:
+  - "lecture": strictly 60 or 120 minutes (never any value in-between; default to 60 if not specified).
+  - "meeting": typically 30 or 60 minutes.
+  - "routine" (e.g., workout, meal, personal chores): typically 30 to 60 minutes.
+  - "evaluative" (e.g., report writing, test, exam prep): typically 60 to 120 minutes.
+  - "others" / simple tasks / calls: typically 15 to 30 minutes.
+- If completely ambiguous, default to 30 minutes.
+- Never output null for estimated_duration; always output a positive integer.
 
 Rules for importance:
 - 5: Critical commitments or high-impact deliverables, such as exams, essential
