@@ -136,9 +136,13 @@ def main(argv=None):
                 print(f" -> Ingesting active daily notes from {daily_notes_path}...")
                 tasks = extract_and_score_notes(daily_notes_path.read_text(encoding="utf-8"))
             else:
-                default_path = repo_root / "data" / "export" / "response.json"
-                print(f" -> Ingesting default tasks from {default_path}...")
-                tasks = score_tasks_from_json(response_json_path=default_path)
+                fallback_path = repo_root / "redundant" / "export" / "response.json"
+                if fallback_path.exists():
+                    print(f" -> Ingesting fallback tasks from {fallback_path}...")
+                    tasks = score_tasks_from_json(response_json_path=fallback_path)
+                else:
+                    print("Error: No note input provided. Pass a note via arguments or write to data/daily_notes.md.")
+                    sys.exit(1)
         print(f" -> Successfully scored {len(tasks)} tasks.")
     except Exception as e:
         print(f"Task Scoring Error: {e}")
