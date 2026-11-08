@@ -82,6 +82,8 @@ $W_{\text{updated}}[h] = \max(0.0, \min(1.0, W_{\text{raw}}[h]))$
 
 ```
 scheduler/
+├── schedule.sh                 # One-click interactive launcher (zero code required)
+├── setup.sh                    # Automated first-time setup and dependency wizard
 ├── pyproject.toml              # Build backend (hatchling), dependencies, and CLI entry point
 ├── requirements.txt            # Dependency manifest for pip users
 ├── data/
@@ -131,11 +133,20 @@ scheduler/
 
 ## 4. Setup & Authentication
 
-### Prerequisites
+### Quick Setup (Recommended for Everyone)
+Run the automated setup wizard to verify Python, install dependencies via `uv`, and validate your credentials:
+```bash
+./setup.sh
+```
+The script runs 5 automated checks and guides you through setting up `credentials.json` and `gemini_api_key.txt` if they are missing.
+
+### Manual Setup (Advanced)
+
+#### Prerequisites
 - Python 3.11+
 - [uv](https://github.com/astral-sh/uv) (recommended) or `pip`
 
-### Step 1: Install Dependencies
+#### Step 1: Install Dependencies
 ```bash
 # Using uv (fastest)
 uv sync --extra dev
@@ -144,7 +155,7 @@ uv sync --extra dev
 pip install -r requirements.txt
 ```
 
-### Step 2: Configure Google Calendar OAuth 2.0
+#### Step 2: Configure Google Calendar OAuth 2.0
 1. Create a project in the [Google Cloud Console](https://console.cloud.google.com/).
 2. Enable the **Google Calendar API**.
 3. Configure the **OAuth Consent Screen** (add scopes: `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/calendar.readonly`).
@@ -152,30 +163,40 @@ pip install -r requirements.txt
 5. Download the credentials JSON file and save it in the repository root as `credentials.json`.
 6. On first execution, the client prompts your browser for one-time OAuth consent and caches the credentials in `token.json` with automatic token refresh.
 
-### Step 3: Configure Gemini API Key
+#### Step 3: Configure Gemini API Key
 Provide your Gemini API key through either:
 ```bash
-# Option A: Environment variable
-export GEMINI_API_KEY="your-api-key-here"
-
-# Option B: Plaintext file in project root
+# Option A: Plaintext file in project root (easiest)
 echo "your-api-key-here" > gemini_api_key.txt
+
+# Option B: Environment variable
+export GEMINI_API_KEY="your-api-key-here"
 ```
 
 ---
 
-## 5. Usage & CLI Workflows
+## 5. Usage & Workflows
 
-The `scheduler` CLI supports multiple invocation modes:
+### Guided Interactive Mode (Zero Code Required)
+The simplest way to use the scheduler is via the interactive launcher:
+```bash
+./schedule.sh
+```
+This launches a guided terminal wizard that:
+1. Prompts you to enter tasks in plain English (one per line).
+2. Asks which day to schedule (Today, Tomorrow, or Pick a date).
+3. Asks whether to use standard hours (09:00 – 21:00) or custom hours.
+4. Generates an optimal conflict-free schedule preview.
+5. Asks for confirmation before adding events to your Google Calendar.
 
 ### Quick Command-Line Scheduling
 Schedule a task directly from your terminal:
 ```bash
 # Preview placement without touching your calendar (Dry Run)
-scheduler "Guitar practice 8pm" --dry-run
+./schedule.sh "Guitar practice 8pm" --dry-run
 
 # Commit and sync to Google Calendar with interactive confirmation [y/N]
-scheduler "Guitar practice 8pm" --sync
+./schedule.sh "Guitar practice 8pm" --sync
 ```
 
 ### Daily Notes Scratchpad Scheduling
@@ -185,24 +206,25 @@ Write multi-line informal tasks into `data/daily_notes.md`:
 - [ ] Team sync with Rohan 30m at 4pm
 - [ ] Complete calculus assignment 2 hours
 ```
-Execute the scheduler without arguments to ingest `data/daily_notes.md` automatically:
+Execute the scheduler to ingest `data/daily_notes.md` automatically:
 ```bash
-scheduler --sync
+./schedule.sh --sync
 ```
 
 ### Scheduling for Tomorrow or Specific Dates
 ```bash
 # Schedule tasks for tomorrow
-scheduler "Gym workout 7am" --tomorrow --dry-run
+./schedule.sh "Gym workout 7am" --tomorrow --dry-run
 
 # Schedule tasks for a specific calendar date
-scheduler "Dentist appointment 11am" --date 2026-11-15 --sync
+./schedule.sh "Dentist appointment 11am" --date 2026-11-15 --sync
 ```
 
 ### CLI Options Reference
 | Flag | Description | Default |
 |---|---|---|
 | `note_words` | Direct note string directly on command line | None |
+| `--interactive` | Launch the guided terminal wizard | Auto-detected |
 | `-n, --notes PATH` | Path to markdown file, text file, or response.json | `data/daily_notes.md` |
 | `--raw-text TEXT` | Raw unstructured notes string | None |
 | `--date YYYY-MM-DD` | Target date for schedule planning | Today |

@@ -1,6 +1,6 @@
 {
   "profile_name": "guitar_practice",
-  "updated_count": 1,
+  "updated_count": 2,
   "hourly_weights": [
     0.0,
     0.0,
@@ -20,12 +20,12 @@
     0.2,
     0.3,
     0.4,
-    0.6,
-    0.8,
+    0.65,
+    0.95,
     1.0,
     0.5,
     0.0,
     0.0
   ],
-  "description": "Established an evening baseline preference peaking at 20:00 for guitar practice while suppressing late night and early morning hours due to noise constraints."
+  "description": "Increased preference weight for the 19:00 hour slot to reinforce evening guitar practice while maintaining low weights during quiet late-night and early-morning hours."
 }
