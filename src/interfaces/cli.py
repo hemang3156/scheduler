@@ -100,42 +100,65 @@ def interactive_mode():
     tz = ZoneInfo(TIMEZONE)
     now = dt.datetime.now(tz)
 
-    # ── Step 1: Collect tasks ────────────────────────────────────────
-    notes_text = _ask_multiline(
-        "What do you want to schedule? Write your tasks in plain English"
-    )
-    if not notes_text.strip():
-        print(f"\n{YELLOW}No tasks entered. Nothing to schedule.{RESET}")
-        sys.exit(0)
-
-    # ── Step 2: Which day? ───────────────────────────────────────────
-    day_choice = _ask_choice(
-        "Schedule for which day?",
-        ["Today", "Tomorrow", "Pick a date"],
+    # ── Step 1: Select date or date range ────────────────────────────
+    date_mode = _ask_choice(
+        "Select scheduling date or date range:",
+        [
+            "Date range (choose initial start date and final end date)",
+            f"Today only ({now.strftime('%A, %b %d')})",
+            f"Tomorrow only ({(now + dt.timedelta(days=1)).strftime('%A, %b %d')})",
+            "Specific single date",
+        ],
         default=1,
     )
-    if day_choice == "Today":
-        target_date = now.date()
-    elif day_choice == "Tomorrow":
-        target_date = (now + dt.timedelta(days=1)).date()
-    else:
+
+    if date_mode.startswith("Date range"):
         while True:
-            date_str = _ask("Enter date (YYYY-MM-DD)")
+            start_str = _ask("Initial (start) date (YYYY-MM-DD)", default=now.date().isoformat())
             try:
-                target_date = dt.date.fromisoformat(date_str)
+                initial_date = dt.date.fromisoformat(start_str)
                 break
             except ValueError:
-                print(f"  {RED}Invalid date. Use format like 2026-12-25.{RESET}")
+                print(f"  {RED}Invalid date format. Expected YYYY-MM-DD (e.g. {now.date().isoformat()}).{RESET}")
 
-    # ── Step 3: Time window ──────────────────────────────────────────
+        while True:
+            end_str = _ask("Final (end) date (YYYY-MM-DD)", default=initial_date.isoformat())
+            try:
+                final_date = dt.date.fromisoformat(end_str)
+                if final_date < initial_date:
+                    print(f"  {RED}Final date ({final_date}) cannot be earlier than initial date ({initial_date}).{RESET}")
+                    continue
+                break
+            except ValueError:
+                print(f"  {RED}Invalid date format. Expected YYYY-MM-DD (e.g. {initial_date.isoformat()}).{RESET}")
+
+    elif date_mode.startswith("Today only"):
+        initial_date = now.date()
+        final_date = now.date()
+
+    elif date_mode.startswith("Tomorrow only"):
+        initial_date = (now + dt.timedelta(days=1)).date()
+        final_date = (now + dt.timedelta(days=1)).date()
+
+    else:
+        while True:
+            date_str = _ask("Enter date (YYYY-MM-DD)", default=now.date().isoformat())
+            try:
+                initial_date = dt.date.fromisoformat(date_str)
+                final_date = initial_date
+                break
+            except ValueError:
+                print(f"  {RED}Invalid date format. Expected YYYY-MM-DD (e.g. {now.date().isoformat()}).{RESET}")
+
+    # ── Step 2: Time window ──────────────────────────────────────────
     use_defaults = _ask_yes_no(
-        f"Use default time window (09:00 – 21:00)?", default_yes=True
+        "Use default daily time window (09:00 – 21:00)?", default_yes=True
     )
     if use_defaults:
         start_hour, end_hour = 9, 21
     else:
-        start_str = _ask("Start hour (0-23, e.g. 8 for 8 AM)", "9")
-        end_str = _ask("End hour (0-23, e.g. 22 for 10 PM)", "21")
+        start_str = _ask("Daily start hour (0-23, e.g. 9 for 9 AM)", "9")
+        end_str = _ask("Daily end hour (0-23, e.g. 21 for 9 PM)", "21")
         try:
             start_hour = int(start_str)
             end_hour = int(end_str)
@@ -145,8 +168,16 @@ def interactive_mode():
             print(f"{RED}Invalid hours. Using defaults (09:00 – 21:00).{RESET}")
             start_hour, end_hour = 9, 21
 
-    start_window = dt.datetime.combine(target_date, dt.time(start_hour, 0), tzinfo=tz)
-    end_window = dt.datetime.combine(target_date, dt.time(end_hour, 0), tzinfo=tz)
+    start_window = dt.datetime.combine(initial_date, dt.time(start_hour, 0), tzinfo=tz)
+    end_window = dt.datetime.combine(final_date, dt.time(end_hour, 0), tzinfo=tz)
+
+    # ── Step 3: Collect tasks ────────────────────────────────────────
+    notes_text = _ask_multiline(
+        "What do you want to schedule? Write your tasks in plain English"
+    )
+    if not notes_text.strip():
+        print(f"\n{YELLOW}No tasks entered. Nothing to schedule.{RESET}")
+        sys.exit(0)
 
     # ── Step 4: Preview or sync? ─────────────────────────────────────
     mode_choice = _ask_choice(
@@ -161,8 +192,14 @@ def interactive_mode():
 
     # ── Step 5: Run the engine ───────────────────────────────────────
     print(f"\n{'=' * 60}")
-    print(f"  Scheduling for {BOLD}{target_date.strftime('%A, %B %d, %Y')}{RESET}")
-    print(f"  Window: {start_window.strftime('%H:%M')} → {end_window.strftime('%H:%M')}")
+    if initial_date == final_date:
+        print(f"  Scheduling for {BOLD}{initial_date.strftime('%A, %B %d, %Y')}{RESET}")
+        print(f"  Window: {start_window.strftime('%H:%M')} → {end_window.strftime('%H:%M')}")
+    else:
+        days_count = (final_date - initial_date).days + 1
+        print(f"  Scheduling Range: {BOLD}{initial_date.isoformat()} → {final_date.isoformat()} ({days_count} days){RESET}")
+        print(f"  Daily Window:     {start_window.strftime('%H:%M')} → {end_window.strftime('%H:%M')} each day")
+    print(f"{'=' * 60}")
     print(f"{'=' * 60}")
 
     # 5a. Extract & score
@@ -270,6 +307,22 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="Target date for scheduling (YYYY-MM-DD). Defaults to today.",
     )
     parser.add_argument(
+        "--start-date",
+        "--from",
+        dest="start_date",
+        type=str,
+        default=None,
+        help="Initial date for scheduling range (YYYY-MM-DD).",
+    )
+    parser.add_argument(
+        "--end-date",
+        "--to",
+        dest="end_date",
+        type=str,
+        default=None,
+        help="Final date for scheduling range (YYYY-MM-DD).",
+    )
+    parser.add_argument(
         "--tomorrow",
         action="store_true",
         help="Schedule tasks for tomorrow instead of today.",
@@ -320,7 +373,7 @@ def _should_use_interactive(args) -> bool:
         return False
     if args.notes or args.raw_text:
         return False
-    if args.dry_run or args.sync or args.tomorrow or args.date:
+    if args.dry_run or args.sync or args.tomorrow or args.date or args.start_date or args.end_date:
         return False
     # No input and no daily_notes.md → launch interactive
     repo_root = Path(__file__).resolve().parent.parent.parent
@@ -344,33 +397,56 @@ def main(argv=None):
     now = dt.datetime.now(tz)
 
     if args.tomorrow:
-        target_date = (now + dt.timedelta(days=1)).date()
+        initial_date = (now + dt.timedelta(days=1)).date()
+        final_date = initial_date
+    elif args.start_date or args.end_date:
+        try:
+            initial_date = dt.date.fromisoformat(args.start_date or args.date or now.date().isoformat())
+            final_date = dt.date.fromisoformat(args.end_date or args.start_date or args.date or now.date().isoformat())
+            if initial_date > final_date:
+                _error_exit(
+                    f"Initial date ({initial_date}) must be on or before final date ({final_date}).",
+                    "Check your --start-date and --end-date values.",
+                )
+        except ValueError as ve:
+            _error_exit(
+                f"Invalid date format in date range.",
+                "Expected format: YYYY-MM-DD (e.g., 2026-12-25).",
+                detail=str(ve),
+            )
     elif args.date:
         try:
-            target_date = dt.date.fromisoformat(args.date)
+            initial_date = dt.date.fromisoformat(args.date)
+            final_date = initial_date
         except ValueError:
             _error_exit(
                 f"Invalid date format '{args.date}'.",
                 "Expected format: YYYY-MM-DD (e.g., 2026-12-25).",
             )
     else:
-        target_date = now.date()
+        initial_date = now.date()
+        final_date = initial_date
 
-    start_window = dt.datetime.combine(target_date, dt.time(args.start_hour, 0), tzinfo=tz)
-    end_window = dt.datetime.combine(target_date, dt.time(args.end_hour, 0), tzinfo=tz)
+    start_window = dt.datetime.combine(initial_date, dt.time(args.start_hour, 0), tzinfo=tz)
+    end_window = dt.datetime.combine(final_date, dt.time(args.end_hour, 0), tzinfo=tz)
 
     if start_window >= end_window:
         _error_exit(
-            f"Start time ({start_window.strftime('%H:%M')}) must be before end time ({end_window.strftime('%H:%M')}).",
-            "Check your --start-hour and --end-hour values.",
+            f"Start window ({start_window.strftime('%Y-%m-%d %H:%M')}) must be before end window ({end_window.strftime('%Y-%m-%d %H:%M')}).",
+            "Check your dates and --start-hour / --end-hour values.",
         )
 
     print("\n" + "=" * 80)
     print("      AUTONOMOUS CALENDAR SCHEDULER — INITIALIZING ENGINE")
     print("=" * 80)
     print(f"Timezone:          {TIMEZONE}")
-    print(f"Target Date:       {target_date.isoformat()} ({'Tomorrow' if args.tomorrow else 'Today'})")
-    print(f"Scheduling Window: {start_window.strftime('%Y-%m-%d %H:%M')} -> {end_window.strftime('%H:%M')}")
+    if initial_date == final_date:
+        print(f"Target Date:       {initial_date.isoformat()} ({'Tomorrow' if args.tomorrow else 'Today'})")
+        print(f"Scheduling Window: {start_window.strftime('%Y-%m-%d %H:%M')} -> {end_window.strftime('%H:%M')}")
+    else:
+        days_count = (final_date - initial_date).days + 1
+        print(f"Target Date Range: {initial_date.isoformat()} -> {final_date.isoformat()} ({days_count} days)")
+        print(f"Daily Window:      {start_window.strftime('%H:%M')} -> {end_window.strftime('%H:%M')} each day")
     print(f"Task Buffer:       {args.buffer} minutes")
 
     # Step 1: Ingest & Score Tasks

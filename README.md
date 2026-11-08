@@ -183,10 +183,10 @@ The simplest way to use the scheduler is via the interactive launcher:
 ./schedule.sh
 ```
 This launches a guided terminal wizard that:
-1. Prompts you to enter tasks in plain English (one per line).
-2. Asks which day to schedule (Today, Tomorrow, or Pick a date).
-3. Asks whether to use standard hours (09:00 – 21:00) or custom hours.
-4. Generates an optimal conflict-free schedule preview.
+1. Prompts you first to choose your date range (Initial start date and Final end date, or single-day shortcuts like Today/Tomorrow).
+2. Prompts whether to use standard daily hours (09:00 – 21:00) or custom daily working hours.
+3. Prompts you to enter tasks in plain English (one per line).
+4. Generates an optimal conflict-free schedule preview across the entire date range (preventing tasks from leaking into overnight sleep hours).
 5. Asks for confirmation before adding events to your Google Calendar.
 
 ### Quick Command-Line Scheduling
@@ -197,6 +197,16 @@ Schedule a task directly from your terminal:
 
 # Commit and sync to Google Calendar with interactive confirmation [y/N]
 ./schedule.sh "Guitar practice 8pm" --sync
+```
+
+### Scheduling Across Date Ranges
+Allow the scheduler to place tasks into free slots across a multi-day window (e.g. over a 3-day or 7-day period):
+```bash
+# Schedule across a date range (Nov 10 to Nov 14)
+./schedule.sh "Complete report 3h" --from 2026-11-10 --to 2026-11-14 --dry-run
+
+# Commit multi-day plan to Google Calendar
+./schedule.sh --start-date 2026-11-10 --end-date 2026-11-14 --sync
 ```
 
 ### Daily Notes Scratchpad Scheduling
@@ -225,10 +235,12 @@ Execute the scheduler to ingest `data/daily_notes.md` automatically:
 |---|---|---|
 | `note_words` | Direct note string directly on command line | None |
 | `--interactive` | Launch the guided terminal wizard | Auto-detected |
+| `--from, --start-date YYYY-MM-DD` | Initial date for scheduling range | Today |
+| `--to, --end-date YYYY-MM-DD` | Final date for scheduling range | Initial date |
+| `--date YYYY-MM-DD` | Target single date for schedule planning | Today |
+| `--tomorrow` | Target tomorrow's calendar window | False |
 | `-n, --notes PATH` | Path to markdown file, text file, or response.json | `data/daily_notes.md` |
 | `--raw-text TEXT` | Raw unstructured notes string | None |
-| `--date YYYY-MM-DD` | Target date for schedule planning | Today |
-| `--tomorrow` | Target tomorrow's calendar window | False |
 | `--start-hour INT` | Daily start hour in 24h format | `9` (09:00) |
 | `--end-hour INT` | Daily end hour in 24h format | `21` (21:00) |
 | `--buffer INT` | Buffer minutes between placed tasks | `5` |

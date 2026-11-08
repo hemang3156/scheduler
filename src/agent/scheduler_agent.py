@@ -125,14 +125,39 @@ class AutonomousScheduler:
             else:
                 existing_events = []
 
-        # 2. Find free gaps
-        free_slots = find_free_slots(
-            events=existing_events,
-            start=start_window,
-            end=end_window,
-            duration_min=min_slot_duration,
-            buffer_minutes=0,
-        )
+        # 2. Find free gaps (single-day or multi-day range)
+        if start_window.date() == end_window.date():
+            free_slots = find_free_slots(
+                events=existing_events,
+                start=start_window,
+                end=end_window,
+                duration_min=min_slot_duration,
+                buffer_minutes=0,
+            )
+        else:
+            # Multi-day range: generate free slots for each day's working window
+            free_slots = []
+            current_day = start_window.date()
+            final_day = end_window.date()
+            start_time = start_window.time()
+            end_time = end_window.time()
+
+            while current_day <= final_day:
+                day_start = datetime.combine(current_day, start_time, tzinfo=self.tz)
+                if start_time < end_time:
+                    day_end = datetime.combine(current_day, end_time, tzinfo=self.tz)
+                else:
+                    day_end = datetime.combine(current_day + timedelta(days=1), end_time, tzinfo=self.tz)
+
+                daily_slots = find_free_slots(
+                    events=existing_events,
+                    start=day_start,
+                    end=day_end,
+                    duration_min=min_slot_duration,
+                    buffer_minutes=0,
+                )
+                free_slots.extend(daily_slots)
+                current_day += timedelta(days=1)
 
         # 3. Load or use provided preference profiles
         resolved_profiles = {}

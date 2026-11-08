@@ -27,6 +27,18 @@ def test_cli_parse_args_explicit_date():
     assert args.date == "2026-12-25"
 
 
+def test_cli_parse_args_date_range():
+    args = parse_args(["--start-date", "2026-12-20", "--end-date", "2026-12-25"])
+    assert args.start_date == "2026-12-20"
+    assert args.end_date == "2026-12-25"
+
+
+def test_cli_parse_args_date_range_aliases():
+    args = parse_args(["--from", "2026-12-20", "--to", "2026-12-25"])
+    assert args.start_date == "2026-12-20"
+    assert args.end_date == "2026-12-25"
+
+
 def test_cli_parse_args_interactive_flag():
     args = parse_args(["--interactive"])
     assert args.interactive is True
@@ -163,21 +175,71 @@ def test_interactive_mode_preview_only(mock_input, mock_extract, mock_scheduler_
     mock_scheduler_instance.generate_plan.return_value = mock_plan
     mock_scheduler_cls.return_value = mock_scheduler_instance
 
-    # Simulate user inputs for interactive mode:
-    # 1. Task input: "Study math 2 hours" then empty line to stop
-    # 2. Day choice: "1" for Today
-    # 3. Default time window: "" (yes)
+    # Simulate user inputs for interactive mode (Date selection is now Step 1):
+    # 1. Day choice: "2" for Today only
+    # 2. Default time window: "" (yes)
+    # 3. Task input: "Study math 2 hours" then empty line to stop
     # 4. Mode choice: "1" for preview only (default)
     mock_input.side_effect = [
+        "2",                    # Today only
+        "",                     # default time window (yes)
         "Study math 2 hours",  # task input
         "",                     # empty line to end tasks
-        "1",                    # Today
-        "",                     # default time window (yes)
         "1",                    # preview only
     ]
 
     interactive_mode()
 
     mock_extract.assert_called_once()
-    # Calendar client should NOT be initialized (preview mode)
     mock_scheduler_cls.assert_called_once_with(calendar_client=None)
+
+
+@patch("src.interfaces.cli.AutonomousScheduler")
+@patch("src.interfaces.cli.extract_and_score_notes")
+@patch("builtins.input")
+def test_interactive_mode_date_range(mock_input, mock_extract, mock_scheduler_cls):
+    """Interactive mode with date range should pass correct start and end windows."""
+    mock_task = ScoredTask(
+        title="Complete Project Milestone",
+        event_type=EventType.ROUTINE,
+        start=DateTimeAnchor(dateTime=None),
+        end=DateTimeAnchor(dateTime=None),
+        estimated_duration=120,
+        importance=5,
+        urgency=4,
+        is_movable=True,
+        priority_category=PriorityCategory.IMPORTANT,
+        scoring_rationale="Project deadline",
+    )
+    mock_extract.return_value = [mock_task]
+
+    mock_plan = MagicMock()
+    mock_plan.placed_tasks = []
+    mock_plan.unplaced_tasks = []
+    mock_scheduler_instance = MagicMock()
+    mock_scheduler_instance.generate_plan.return_value = mock_plan
+    mock_scheduler_cls.return_value = mock_scheduler_instance
+
+    # 1. Date choice: "1" (Date range)
+    # 2. Initial date: 2026-12-01
+    # 3. Final date: 2026-12-05
+    # 4. Default time window: "" (yes, 09:00 - 21:00)
+    # 5. Task input: "Complete Project Milestone 2 hours", then empty line
+    # 6. Mode choice: "1" (preview only)
+    mock_input.side_effect = [
+        "1",                                # Date range
+        "2026-12-01",                       # Initial date
+        "2026-12-05",                       # Final date
+        "",                                 # Default daily window
+        "Complete Project Milestone 2h",    # Task input
+        "",                                 # End task input
+        "1",                                # Preview only
+    ]
+
+    interactive_mode()
+
+    mock_extract.assert_called_once()
+    mock_scheduler_instance.generate_plan.assert_called_once()
+    call_kwargs = mock_scheduler_instance.generate_plan.call_args[1]
+    assert call_kwargs["start_window"].date() == dt.date(2026, 12, 1)
+    assert call_kwargs["end_window"].date() == dt.date(2026, 12, 5)

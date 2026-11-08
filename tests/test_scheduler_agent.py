@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 import pytest
@@ -170,3 +170,52 @@ def test_autonomous_scheduler_apply_plan_with_mock_client():
     assert len(created_events) == 1
     assert mock_client.create_event.called
     assert created_events[0].summary == "Review Code"
+
+
+def test_autonomous_scheduler_generate_plan_multi_day_range():
+    """Verify that multi-day date ranges generate daily slots without leaking overnight gaps."""
+    scheduler = AutonomousScheduler()
+
+    # Range across 2 days: Nov 6 09:00 -> Nov 7 12:00
+    start_window = datetime(2026, 11, 6, 9, 0, tzinfo=TZ)
+    end_window = datetime(2026, 11, 7, 12, 0, tzinfo=TZ)
+
+    # Day 1 has an event taking 10:00 -> 12:00, leaving only 09:00 -> 10:00 (60m)
+    existing_events = [
+        CalendarEvent(
+            id="ev_day1",
+            summary="Morning Meeting",
+            start=datetime(2026, 11, 6, 10, 0, tzinfo=TZ),
+            end=datetime(2026, 11, 6, 12, 0, tzinfo=TZ),
+        )
+    ]
+
+    # Task A is 45m (fits on Day 1: 09:00 -> 09:45)
+    # Task B is 90m (does NOT fit in Day 1's remaining 15m, so it must spill to Day 2: 09:00 -> 10:30)
+    tasks = [
+        make_mock_task("Task A", duration=45, importance=5, urgency=5),
+        make_mock_task("Task B", duration=90, importance=4, urgency=4),
+    ]
+
+    plan = scheduler.generate_plan(
+        tasks=tasks,
+        start_window=start_window,
+        end_window=end_window,
+        existing_events=existing_events,
+        buffer_minutes=5,
+        profiles={},
+    )
+
+    assert len(plan.placed_tasks) == 2
+    assert len(plan.unplaced_tasks) == 0
+
+    # Task A placed on Day 1
+    assert plan.placed_tasks[0].task.title == "Task A"
+    assert plan.placed_tasks[0].start.date() == date(2026, 11, 6)
+    assert plan.placed_tasks[0].start == datetime(2026, 11, 6, 9, 0, tzinfo=TZ)
+
+    # Task B placed on Day 2 (NOT overnight!)
+    assert plan.placed_tasks[1].task.title == "Task B"
+    assert plan.placed_tasks[1].start.date() == date(2026, 11, 7)
+    assert plan.placed_tasks[1].start == datetime(2026, 11, 7, 9, 0, tzinfo=TZ)
+    assert plan.placed_tasks[1].end == datetime(2026, 11, 7, 10, 30, tzinfo=TZ)
