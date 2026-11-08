@@ -3,7 +3,9 @@
 Write your informal daily notes or tasks here. The Autonomous Scheduler will parse, prioritize, and fit them around your calendar.
 
 ## Tasks
-- [ ] Review PR and code architecture 45m by 3pm
-- [ ] Team sync with Rohan 30m at 4pm
-- [ ] Complete calculus assignment 2 hours
-- [ ] Guitar practice 45m 8pm
+
+- [ ] dop lab check if present or not at 9am
+- [ ] krd study 10am
+- [ ] revise for ml assg viva
+- [ ] quantum computing study
+- [ ] sp2 prepare adsorption

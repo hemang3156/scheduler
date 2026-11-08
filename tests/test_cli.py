@@ -44,6 +44,12 @@ def test_cli_parse_args_interactive_flag():
     assert args.interactive is True
 
 
+def test_cli_parse_args_yes_flag():
+    args = parse_args(["--sync", "-y"])
+    assert args.sync is True
+    assert args.yes is True
+
+
 # ── Interactive mode detection tests ─────────────────────────────────
 
 def test_should_use_interactive_with_flag():

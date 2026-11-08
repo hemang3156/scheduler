@@ -356,6 +356,12 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="Prompt to commit and write placed tasks into Google Calendar.",
     )
     parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Automatically confirm and bypass [y/N] prompt when --sync is active.",
+    )
+    parser.add_argument(
         "--interactive",
         action="store_true",
         help="Launch the guided interactive wizard (no flags needed).",
@@ -532,8 +538,14 @@ def main(argv=None):
     # Step 4: Interactive Confirmation
     if args.sync and client is not None and plan.placed_tasks:
         print("\n" + "-" * 80)
-        confirm = input("Would you like to sync these placed tasks to Google Calendar? [y/N]: ").strip().lower()
-        if confirm == "y":
+        if args.yes:
+            confirm = "y"
+        else:
+            try:
+                confirm = input("Would you like to sync these placed tasks to Google Calendar? [y/N]: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "n"
+        if confirm in ("y", "yes"):
             print("Syncing events to Google Calendar...")
             created = scheduler.apply_plan(plan, dry_run=False)
             print(f"Successfully synced {len(created)} events to your calendar!")
