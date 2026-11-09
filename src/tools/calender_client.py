@@ -112,12 +112,10 @@ class CalendarClient:
             raise CalendarError(f"An error occurred while creating the event: {error}")
     
     def patch_event(self, event_id: str, new_start: dt.datetime, new_end: dt.datetime):
-
         patch_body = {
             "start": {"dateTime": new_start.isoformat(), "timeZone": TIMEZONE},
             "end": {"dateTime": new_end.isoformat(), "timeZone": TIMEZONE},
         }
-            
         try:
             self.service.events().patch(calendarId=self.calendar_id, eventId=event_id, body=patch_body).execute()
         except HttpError as error:
@@ -125,3 +123,23 @@ class CalendarClient:
                 raise CalendarResourceNotFoundError(f"Event with ID {event_id} not found.") from error
             else:
                 raise CalendarError(f"Failed to update event {event_id}: {error}") from error
+
+    def delete_event(self, event_id: str):
+        try:
+            self.service.events().delete(calendarId=self.calendar_id, eventId=event_id).execute()
+        except HttpError as error:
+            if error.resp.status == 404:
+                raise CalendarResourceNotFoundError(f"Event with ID {event_id} not found.") from error
+            else:
+                raise CalendarError(f"Failed to delete event {event_id}: {error}") from error
+
+    def delete_events(self, event_ids: list[str]) -> list[str]:
+        """Deletes multiple events by their IDs."""
+        deleted: list[str] = []
+        for event_id in event_ids:
+            self.delete_event(event_id)
+            deleted.append(event_id)
+        return deleted
+
+
+

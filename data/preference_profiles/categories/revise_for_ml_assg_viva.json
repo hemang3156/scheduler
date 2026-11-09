@@ -1,0 +1,31 @@
+{
+  "profile_name": "revise_for_ml_assg_viva",
+  "updated_count": 1,
+  "hourly_weights": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.075,
+    0.2667,
+    0.4167,
+    0.3944,
+    0.3141,
+    0.5095,
+    0.6813,
+    0.8,
+    0.9,
+    0.7,
+    0.5567,
+    0.5495,
+    0.4854,
+    0.2375,
+    0.0,
+    0.0
+  ],
+  "description": "Boosted preference weights around 16:00 to 17:00 to accommodate the scheduled evaluative ML viva revision session."
+}

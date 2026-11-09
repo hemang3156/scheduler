@@ -252,3 +252,42 @@ def test_gradient_anchor_proximity_placement():
     # Should pick evening slot closest to 20:00 anchor (20:30) rather than morning slot (10:00)
     assert placed.start == datetime(2026, 11, 6, 20, 30, tzinfo=TZ)
 
+
+def test_high_priority_fixed_task_evaluated_first_over_non_priority():
+    """Verify that when fixed tasks conflict on the same slot, the higher-priority task takes precedence."""
+    slots = [
+        TimeSlot(
+            start=datetime(2026, 11, 10, 14, 0, tzinfo=TZ),
+            end=datetime(2026, 11, 10, 14, 30, tzinfo=TZ),
+            duration_minutes=30,
+        ),
+    ]
+
+    # Lower priority task listed first
+    low_task = make_task(
+        "Casual Help",
+        duration=30,
+        is_movable=False,
+        start_str="2026-11-10T14:00",
+        importance=2,
+        urgency=2,
+    )
+    # High priority task (e.g. viva) listed second
+    high_task = make_task(
+        "ML Viva Discussion",
+        duration=30,
+        is_movable=False,
+        start_str="2026-11-10T14:00",
+        importance=5,
+        urgency=5,
+    )
+
+    plan = optimize_schedule(tasks=[low_task, high_task], available_slots=slots)
+
+    # High priority task must be placed, lower priority must be unplaced
+    assert len(plan.placed_tasks) == 1
+    assert plan.placed_tasks[0].task.title == "ML Viva Discussion"
+    assert len(plan.unplaced_tasks) == 1
+    assert plan.unplaced_tasks[0].task.title == "Casual Help"
+
+

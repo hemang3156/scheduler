@@ -6,6 +6,7 @@ NOTES_EXTRACTION_PROMPT_TEMPLATE = """You are an expert executive task extractio
 
 Reference Anchors:
 - Current Reference Date: {current_date}
+- Current Time: {current_time}
 - Current Timezone: {timezone}
 
 Input Notes:
@@ -19,13 +20,29 @@ Instructions:
    - "title": Clean, concise title.
    - "event_type": One of "lecture", "meeting", "routine", "evaluative", "others".
    - "start": An explicit ISO local datetime (YYYY-MM-DDTHH:MM) if specifically scheduled, otherwise null.
-   - "end": An explicit ISO local deadline or end datetime (YYYY-MM-DDTHH:MM) if stated, otherwise null.
-   - "estimated_duration": Realistic duration in minutes (positive integer, minimum 15 minutes unless trivial).
+   - "end": An explicit ISO local deadline or end datetime (YYYY-MM-DDTHH:MM) ONLY if an explicit deadline or end time was stated with keywords like 'by', 'before', 'until', 'to'. If only a start or preferred time is mentioned (e.g. '10am'), set "end" to null.
+   - "estimated_duration": Realistic duration in minutes (positive integer, minimum 15 minutes unless trivial). Default self-study sessions to 45-60 minutes unless stated otherwise. Quick checks/reminders to 15-30 minutes.
    - "importance": Integer from 1 (trivial) to 5 (critical deliverable/health/high-stakes).
    - "urgency": Integer from 1 (flexible/someday) to 5 (due today/ASAP).
    - "is_movable": False for fixed meetings or scheduled classes with others; True for solo work, practice, chores.
    - "priority_category": "urgent", "important", "routine", or "low_priority".
    - "scoring_rationale": One concise sentence explaining the scores.
+3. Priority Processing & Time Windows:
+   - High-Priority Task Protection:
+     - Critical academic deliverables, vivas, exams, graded evaluations, and high-stakes meetings with professors or evaluators must be scored with high importance (4-5) and urgency (4-5), and priority_category="urgent".
+     - General project assistance, casual study, or non-urgent queries should be scored lower (importance 2-3, urgency 2-3).
+     - High priority tasks must be processed first so lower priority or routine tasks do not take up their space or block them.
+   - Time Windows vs Fixed Appointments:
+     - If a note specifies a time window or range (e.g. "between 2pm-6pm" or "between 2-6pm"), do NOT pin it to start at the window start (14:00) with is_movable=False.
+     - Mark is_movable=True, set "end" to the window deadline (e.g. 18:00), and leave "start" as null (or preferred anchor). This allows multiple tasks within that window to place flexibly without falsely colliding at the window start.
+     - Only set is_movable=False if the task is pinned to an exact, immovable start time (e.g. "at 2pm sharp", "from 9am to 10:45am").
+4. Time & Date Disambiguation:
+   - Contextual AM/PM: If a start time lacks an AM/PM marker (e.g. 'from 10:45 to 12:15am'), infer AM/PM from context. If an event ends at 12:15 AM (midnight), the preceding 10:45 is 10:45 PM. Also, if a time without AM/PM would be in the past compared to Current Time, interpret it as the upcoming future hour.
+   - Midnight Rollover: 12:00 AM (00:00) through early morning is part of the NEXT calendar day. If a task starts in the late evening of {current_date} (e.g. 10:45 PM) and ends past midnight (e.g. 12:15 AM or 1:00 AM), its 'end' datetime MUST be on the next calendar day ({next_date}T00:15 or {next_date}T01:00). An end datetime must never be earlier than its start datetime.
+   - 12 AM vs 12 PM: 12:00 AM is 00:00 (midnight). 12:15 AM is 00:15. 12:00 PM is 12:00 (midday).
+5. Preference & Slot Guidelines:
+   - Do not greedily follow preference weights over actual user intent.
+   - Do not anchor or constrain events into slots that are too low in preference weights or unsuitable, unless there is no choice or an explicit deadline demands it.
 
 Output format:
 Return a JSON object conforming strictly to the ScoredTaskList schema.
@@ -73,6 +90,13 @@ Your task is to evaluate, calibrate, and augment each item with operational sche
 6. **scoring_rationale (string)**:
    - One concise sentence explaining why the scores and mobility were assigned.
 
+7. **Preference & Slot Guidelines**:
+   - Do not greedily follow preference weights.
+   - Do not recommend or anchor events in slots too low in preference weights unless there is no alternative choice.
+
+8. **High-Priority Task Protection**:
+   - High-priority tasks (academic evaluations, vivas, exams, critical deliverables) must be scored with high importance (4-5) and urgency (4-5) and prioritized so that lower-priority tasks (general help, casual study, routine chores) never take up their slot or window.
+
 ### Input Data
 {response_json}
 """
@@ -101,10 +125,14 @@ The user has scheduled/confirmed a calendar event. Your task is to inspect the e
      - Boost the scheduled hour window significantly (e.g., 0.8 to 1.0).
      - Provide a smooth transition to adjacent hours.
    - If this is a recurring observation (`updated_count > 0`), reinforce the hours where the event occurred with an incremental boost while preserving previously learned shapes.
-2. **Strict Range Requirements**:
+2. **Preference Curve Calibration Principles**:
+   - Do not greedily polarize weights (e.g. driving viable daytime hours to near zero).
+   - Maintain moderate, viable baseline weights across usable daytime hours so the scheduler does not greedily over-index on a single hour.
+   - Keep truly unfavorable or disruptive slots sufficiently low in weight so the optimizer will not put events into slots too low in weights unless there is no choice.
+3. **Strict Range Requirements**:
    - Every single hourly weight in the output list MUST strictly be a float between 0.0 and 1.0.
    - Output must contain EXACTLY 24 floats representing hours 0 through 23 in chronological order.
-3. **Format**:
+4. **Format**:
    - Return a JSON object strictly conforming to the UpdatedCurveResponse schema:
      - "hourly_weights": array of exactly 24 floats.
      - "update_rationale": one concise sentence explaining how the curve was adjusted.
@@ -121,11 +149,29 @@ def build_scoring_prompt(raw_json_text: str, current_date: str, timezone: str) -
     )
 
 
-def build_notes_extraction_prompt(raw_notes_text: str, current_date: str, timezone: str) -> str:
+def build_notes_extraction_prompt(
+    raw_notes_text: str,
+    current_date: str,
+    timezone: str,
+    current_time: Optional[str] = None,
+    next_date: Optional[str] = None,
+) -> str:
     """Builds raw notes extraction prompt avoiding str.format brace clashes."""
+    import datetime as _dt
+    if next_date is None:
+        try:
+            d = _dt.date.fromisoformat(current_date)
+            next_date = (d + _dt.timedelta(days=1)).isoformat()
+        except Exception:
+            next_date = current_date
+    if current_time is None:
+        current_time = "Unspecified"
+
     return (
         NOTES_EXTRACTION_PROMPT_TEMPLATE
         .replace("{current_date}", current_date)
+        .replace("{next_date}", next_date)
+        .replace("{current_time}", current_time)
         .replace("{timezone}", timezone)
         .replace("{raw_notes}", raw_notes_text)
     )

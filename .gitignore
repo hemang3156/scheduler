@@ -2,6 +2,7 @@
 # Secrets / credentials
 .env
 .env.*
+!.env.example
 credentials.json
 token.json
 scheduler_creds.json
@@ -10,14 +11,12 @@ scheduler_creds.json
 client_secret*.json
 *.key
 gemini_api_key.txt
+*.tar.gz
 data/API_tokens_values/
 data/clientJson/
 data/export/
 processed_ids.json
-redundant/API_tokens_values/
-redundant/clientJson/
-redundant/export/
-redundant/processed_ids.json
+redundant/
 
 .uv-cache/
 CODEX.md

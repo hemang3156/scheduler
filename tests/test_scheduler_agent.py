@@ -116,6 +116,7 @@ def test_autonomous_scheduler_generate_plan_with_existing_events():
         existing_events=existing_events,
         buffer_minutes=5,
         profiles={},
+        now=start_window,
     )
 
     assert len(plan.placed_tasks) == 2
@@ -204,6 +205,7 @@ def test_autonomous_scheduler_generate_plan_multi_day_range():
         existing_events=existing_events,
         buffer_minutes=5,
         profiles={},
+        now=start_window,
     )
 
     assert len(plan.placed_tasks) == 2
@@ -219,3 +221,128 @@ def test_autonomous_scheduler_generate_plan_multi_day_range():
     assert plan.placed_tasks[1].start.date() == date(2026, 11, 7)
     assert plan.placed_tasks[1].start == datetime(2026, 11, 7, 9, 0, tzinfo=TZ)
     assert plan.placed_tasks[1].end == datetime(2026, 11, 7, 10, 30, tzinfo=TZ)
+
+
+def test_slots_with_end_before_now_are_ignored():
+    """Verify that slots whose end_time is before or at now are not considered."""
+    scheduler = AutonomousScheduler()
+    start_window = datetime(2026, 11, 9, 9, 0, tzinfo=TZ)
+    end_window = datetime(2026, 11, 9, 21, 0, tzinfo=TZ)
+    now_time = datetime(2026, 11, 9, 16, 0, tzinfo=TZ)
+
+    # Event from 17:00 to 21:00, leaving only 09:00 -> 16:00 (which is before or at now)
+    existing_events = [
+        CalendarEvent(
+            id="ev_afternoon",
+            summary="Late Meeting",
+            start=datetime(2026, 11, 9, 17, 0, tzinfo=TZ),
+            end=datetime(2026, 11, 9, 21, 0, tzinfo=TZ),
+        )
+    ]
+
+    task = make_mock_task("Deep Study", duration=90, importance=5, urgency=5)
+
+    plan = scheduler.generate_plan(
+        tasks=[task],
+        start_window=start_window,
+        end_window=end_window,
+        existing_events=existing_events,
+        buffer_minutes=5,
+        profiles={},
+        now=now_time,
+    )
+
+    # The 90m task cannot fit in the remaining 16:00 -> 17:00 (60m) gap,
+    # and all 09:00 -> 16:00 slots ended before/at now, so task must be unplaced.
+    assert len(plan.placed_tasks) == 0
+    assert len(plan.unplaced_tasks) == 1
+    # Remaining slots should only contain future/valid slots (16:00 -> 17:00)
+    for s in plan.remaining_slots:
+        assert s.end > now_time
+        assert s.start >= now_time
+
+
+def test_slots_crossing_now_are_clipped():
+    """Verify that a slot starting before now but ending after now is clipped to start at now."""
+    scheduler = AutonomousScheduler()
+    # Entire window 09:00 -> 21:00 with no commitments
+    start_window = datetime(2026, 11, 9, 9, 0, tzinfo=TZ)
+    end_window = datetime(2026, 11, 9, 21, 0, tzinfo=TZ)
+    now_time = datetime(2026, 11, 9, 14, 30, tzinfo=TZ)
+
+    task = make_mock_task("Immediate Task", duration=60, importance=5, urgency=5)
+
+    plan = scheduler.generate_plan(
+        tasks=[task],
+        start_window=start_window,
+        end_window=end_window,
+        existing_events=[],
+        buffer_minutes=5,
+        profiles={},
+        now=now_time,
+    )
+
+    assert len(plan.placed_tasks) == 1
+    placed = plan.placed_tasks[0]
+    # Placed task must start at or after now_time (14:30), not at 09:00!
+    assert placed.start >= now_time
+    assert placed.start == now_time
+    assert placed.end == now_time + timedelta(minutes=60)
+
+
+def test_continuous_24h_window_recognizes_late_evening_slots():
+    """Verify that continuous_window=True preserves late-night windows across midnight (e.g. between dinner and sleep)."""
+    scheduler = AutonomousScheduler()
+
+    now_time = datetime(2026, 11, 9, 19, 45, tzinfo=TZ)
+    start_window = now_time
+    end_window = now_time + timedelta(hours=24)
+
+    # Dinner: 20:30 -> 21:30 tonight
+    # Sleep: 01:00 -> 08:00 tomorrow morning
+    existing_events = [
+        CalendarEvent(
+            id="dinner",
+            summary="Dinner",
+            start=datetime(2026, 11, 9, 20, 30, tzinfo=TZ),
+            end=datetime(2026, 11, 9, 21, 30, tzinfo=TZ),
+        ),
+        CalendarEvent(
+            id="sleep",
+            summary="Sleep",
+            start=datetime(2026, 11, 10, 1, 0, tzinfo=TZ),
+            end=datetime(2026, 11, 10, 8, 0, tzinfo=TZ),
+        ),
+    ]
+
+    # Task: Study session from 22:00 to 23:30 (90 mins)
+    task = ScoredTask(
+        title="krd study",
+        event_type=EventType.ROUTINE,
+        start=DateTimeAnchor(dateTime="2026-11-09T22:00"),
+        end=DateTimeAnchor(dateTime="2026-11-09T23:30"),
+        estimated_duration=90,
+        importance=4,
+        urgency=5,
+        is_movable=True,
+        priority_category=PriorityCategory.URGENT,
+        scoring_rationale="Study session tonight",
+    )
+
+    plan = scheduler.generate_plan(
+        tasks=[task],
+        start_window=start_window,
+        end_window=end_window,
+        existing_events=existing_events,
+        buffer_minutes=5,
+        profiles={},
+        now=now_time,
+        continuous_window=True,
+    )
+
+    assert len(plan.placed_tasks) == 1
+    placed = plan.placed_tasks[0]
+    assert placed.task.title == "krd study"
+    assert placed.start == datetime(2026, 11, 9, 22, 0, tzinfo=TZ)
+    assert placed.end == datetime(2026, 11, 9, 23, 30, tzinfo=TZ)
+

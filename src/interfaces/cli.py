@@ -94,11 +94,14 @@ def _ask_multiline(prompt: str) -> str:
     return "\n".join(lines)
 
 
-def interactive_mode():
+def interactive_mode(now: dt.datetime | None = None):
     """Guided wizard for non-technical users. No flags, no jargon."""
     _banner()
     tz = ZoneInfo(TIMEZONE)
-    now = dt.datetime.now(tz)
+    if now is None:
+        now = dt.datetime.now(tz).replace(microsecond=0)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=tz)
 
     # ── Step 1: Select date or date range ────────────────────────────
     date_mode = _ask_choice(
@@ -171,6 +174,18 @@ def interactive_mode():
     start_window = dt.datetime.combine(initial_date, dt.time(start_hour, 0), tzinfo=tz)
     end_window = dt.datetime.combine(final_date, dt.time(end_hour, 0), tzinfo=tz)
 
+    if initial_date == now.date() and start_window < now:
+        start_window = now
+
+    if initial_date == final_date and start_window >= end_window:
+        _error_exit(
+            f"Start window ({start_window.strftime('%I:%M %p')}) is at or after end window ({end_window.strftime('%I:%M %p')}).",
+            "Today's daily window has ended. Choose tomorrow or a future date range.",
+        )
+    elif initial_date < final_date and now >= dt.datetime.combine(initial_date, dt.time(end_hour, 0), tzinfo=tz):
+        initial_date = initial_date + dt.timedelta(days=1)
+        start_window = dt.datetime.combine(initial_date, dt.time(start_hour, 0), tzinfo=tz)
+
     # ── Step 3: Collect tasks ────────────────────────────────────────
     notes_text = _ask_multiline(
         "What do you want to schedule? Write your tasks in plain English"
@@ -194,11 +209,11 @@ def interactive_mode():
     print(f"\n{'=' * 60}")
     if initial_date == final_date:
         print(f"  Scheduling for {BOLD}{initial_date.strftime('%A, %B %d, %Y')}{RESET}")
-        print(f"  Window: {start_window.strftime('%H:%M')} → {end_window.strftime('%H:%M')}")
+        print(f"  Window: {start_window.strftime('%I:%M %p')} → {end_window.strftime('%I:%M %p')}")
     else:
         days_count = (final_date - initial_date).days + 1
         print(f"  Scheduling Range: {BOLD}{initial_date.isoformat()} → {final_date.isoformat()} ({days_count} days){RESET}")
-        print(f"  Daily Window:     {start_window.strftime('%H:%M')} → {end_window.strftime('%H:%M')} each day")
+        print(f"  Daily Window:     {start_window.strftime('%I:%M %p')} → {end_window.strftime('%I:%M %p')} each day")
     print(f"{'=' * 60}")
     print(f"{'=' * 60}")
 
@@ -240,6 +255,7 @@ def interactive_mode():
         end_window=end_window,
         existing_events=existing_events,
         buffer_minutes=5,
+        now=now,
     )
 
     # ── Step 6: Show results ─────────────────────────────────────────
@@ -330,13 +346,13 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument(
         "--start-hour",
         type=int,
-        default=9,
+        default=None,
         help="Daily starting hour in 24-hour format (default: 9 for 09:00).",
     )
     parser.add_argument(
         "--end-hour",
         type=int,
-        default=21,
+        default=None,
         help="Daily ending hour in 24-hour format (default: 21 for 21:00).",
     )
     parser.add_argument(
@@ -391,17 +407,21 @@ def _should_use_interactive(args) -> bool:
     return True
 
 
-def main(argv=None):
+def main(argv=None, now: dt.datetime | None = None):
     args = parse_args(argv)
 
     # ── Interactive wizard shortcut ──────────────────────────────────
     if _should_use_interactive(args):
-        interactive_mode()
+        interactive_mode(now=now)
         return
 
     tz = ZoneInfo(TIMEZONE)
-    now = dt.datetime.now(tz)
+    if now is None:
+        now = dt.datetime.now(tz).replace(microsecond=0)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=tz)
 
+    is_default_range = False
     if args.tomorrow:
         initial_date = (now + dt.timedelta(days=1)).date()
         final_date = initial_date
@@ -430,29 +450,69 @@ def main(argv=None):
                 "Expected format: YYYY-MM-DD (e.g., 2026-12-25).",
             )
     else:
+        # Default: from tz.now to 24 hours after it
+        is_default_range = True
         initial_date = now.date()
-        final_date = initial_date
+        final_date = (now + dt.timedelta(hours=24)).date()
 
-    start_window = dt.datetime.combine(initial_date, dt.time(args.start_hour, 0), tzinfo=tz)
-    end_window = dt.datetime.combine(final_date, dt.time(args.end_hour, 0), tzinfo=tz)
-
-    if start_window >= end_window:
+    if final_date < now.date():
         _error_exit(
-            f"Start window ({start_window.strftime('%Y-%m-%d %H:%M')}) must be before end window ({end_window.strftime('%Y-%m-%d %H:%M')}).",
-            "Check your dates and --start-hour / --end-hour values.",
+            f"Target date ({final_date}) is in the past.",
+            "Scheduling is only permitted for the current time onward.",
         )
+
+    if initial_date < now.date():
+        initial_date = now.date()
+
+    if is_default_range and args.start_hour is None and args.end_hour is None:
+        daily_start = None
+        daily_end = None
+        continuous_window = True
+        start_window = now
+        end_window = now + dt.timedelta(hours=24)
+    else:
+        continuous_window = False
+        start_hour = args.start_hour if args.start_hour is not None else 9
+        end_hour = args.end_hour if args.end_hour is not None else 21
+        daily_start = dt.time(start_hour, 0)
+        daily_end = dt.time(end_hour, 0)
+
+        if is_default_range:
+            start_window = now
+            end_window = now + dt.timedelta(hours=24)
+        else:
+            start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
+            end_window = dt.datetime.combine(final_date, daily_end, tzinfo=tz)
+
+            if initial_date == now.date() and start_window < now:
+                start_window = now
+
+            if initial_date == final_date and start_window >= end_window:
+                _error_exit(
+                    f"Start window ({start_window.strftime('%Y-%m-%d %I:%M %p')}) is at or after end window ({end_window.strftime('%I:%M %p')}).",
+                    "Today's scheduling window has ended. Use --tomorrow to schedule for tomorrow, or specify a later --end-hour.",
+                )
+            elif initial_date < final_date and now >= dt.datetime.combine(initial_date, daily_end, tzinfo=tz):
+                initial_date = initial_date + dt.timedelta(days=1)
+                start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
 
     print("\n" + "=" * 80)
     print("      AUTONOMOUS CALENDAR SCHEDULER — INITIALIZING ENGINE")
     print("=" * 80)
     print(f"Timezone:          {TIMEZONE}")
-    if initial_date == final_date:
+    if is_default_range:
+        print(f"Target Window:     {start_window.strftime('%Y-%m-%d %I:%M %p')} -> {end_window.strftime('%Y-%m-%d %I:%M %p')} (Next 24 Hours)")
+        if daily_start is not None and daily_end is not None:
+            print(f"Daily Operating:   {daily_start.strftime('%I:%M %p')} -> {daily_end.strftime('%I:%M %p')}")
+        else:
+            print("Daily Operating:   Continuous 24-Hour Rolling Window")
+    elif initial_date == final_date:
         print(f"Target Date:       {initial_date.isoformat()} ({'Tomorrow' if args.tomorrow else 'Today'})")
-        print(f"Scheduling Window: {start_window.strftime('%Y-%m-%d %H:%M')} -> {end_window.strftime('%H:%M')}")
+        print(f"Scheduling Window: {start_window.strftime('%Y-%m-%d %I:%M %p')} -> {end_window.strftime('%I:%M %p')}")
     else:
         days_count = (final_date - initial_date).days + 1
         print(f"Target Date Range: {initial_date.isoformat()} -> {final_date.isoformat()} ({days_count} days)")
-        print(f"Daily Window:      {start_window.strftime('%H:%M')} -> {end_window.strftime('%H:%M')} each day")
+        print(f"Daily Window:      {start_window.strftime('%I:%M %p')} -> {end_window.strftime('%I:%M %p')} each day")
     print(f"Task Buffer:       {args.buffer} minutes")
 
     # Step 1: Ingest & Score Tasks
@@ -528,6 +588,10 @@ def main(argv=None):
         end_window=end_window,
         existing_events=existing_events,
         buffer_minutes=args.buffer,
+        now=now,
+        daily_start_time=daily_start,
+        daily_end_time=daily_end,
+        continuous_window=continuous_window,
     )
 
     # Step 3: Render Diff

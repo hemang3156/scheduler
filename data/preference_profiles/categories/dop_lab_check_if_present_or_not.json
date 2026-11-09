@@ -1,0 +1,31 @@
+{
+  "profile_name": "dop_lab_check_if_present_or_not",
+  "updated_count": 1,
+  "hourly_weights": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.075,
+    0.2667,
+    0.4167,
+    0.3944,
+    0.3141,
+    0.5095,
+    0.6813,
+    0.7481,
+    0.85,
+    0.95,
+    0.5567,
+    0.5495,
+    0.4854,
+    0.2375,
+    0.0,
+    0.0
+  ],
+  "description": "Adjusted the preference curve to strongly reinforce the late afternoon window around 17:00 where the routine lab check event was scheduled."
+}

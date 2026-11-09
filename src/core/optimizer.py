@@ -101,8 +101,13 @@ def optimize_schedule(
     buffer_delta = timedelta(minutes=task_buffer_minutes)
 
     # -----------------------------------------------------------------------
-    # Step 1: Place Fixed / Immovable Tasks
+    # Step 1: Place Fixed / Immovable Tasks (Highest Priority First)
     # -----------------------------------------------------------------------
+    # Sort fixed tasks primarily by priority score descending (-t[3]), then start time (t[2])
+    # This ensures high-priority fixed commitments are evaluated and placed first,
+    # preventing lower-priority tasks from occupying constrained slots.
+    fixed_tasks.sort(key=lambda t: (-t[3], t[2]))
+
     for task, duration_m, fixed_start, score in fixed_tasks:
         fixed_end = fixed_start + timedelta(minutes=duration_m)
         slot_idx_found = -1
@@ -131,7 +136,13 @@ def optimize_schedule(
                     TimeSlot(start=target_slot.start, end=fixed_start, duration_minutes=prefix_mins)
                 )
 
-            suffix_start = fixed_end + buffer_delta
+            # If another fixed task is scheduled adjacent to or within buffer of this fixed_end,
+            # do not deduct buffer between them so consecutive fixed blocks don't collide.
+            has_adjacent_fixed = any(
+                f_s >= fixed_end and f_s < fixed_end + buffer_delta for _, _, f_s, _ in fixed_tasks
+            )
+            eff_buffer = timedelta(0) if has_adjacent_fixed else buffer_delta
+            suffix_start = fixed_end + eff_buffer
             if suffix_start < target_slot.end:
                 suffix_mins = int((target_slot.end - suffix_start).total_seconds() // 60)
                 if suffix_mins >= min_slot_duration:

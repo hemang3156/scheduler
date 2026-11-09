@@ -1,0 +1,31 @@
+{
+  "profile_name": "quantum_computing_study",
+  "updated_count": 1,
+  "hourly_weights": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.075,
+    0.2667,
+    0.4167,
+    0.3944,
+    0.3141,
+    0.5095,
+    0.6813,
+    0.7481,
+    0.7733,
+    0.75,
+    0.95,
+    0.65,
+    0.4854,
+    0.2375,
+    0.0,
+    0.0
+  ],
+  "description": "Boosted preference weights around the 18:00 to 19:00 window to establish a strong baseline for the quantum computing study session."
+}
