@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from pathlib import Path
 from typing import List, Optional, Union, Dict
 from zoneinfo import ZoneInfo
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 TIMEZONE = "Asia/Kolkata"
 
 
-def format_schedule_diff(plan: SchedulePlan) -> str:
+def format_schedule_diff(plan: SchedulePlan, use_12hr: bool = True) -> str:
     """
     Renders a clear, deterministic ASCII diff table of the proposed schedule.
     Follows human-in-the-loop safety principles.
@@ -41,16 +41,25 @@ def format_schedule_diff(plan: SchedulePlan) -> str:
     if not plan.placed_tasks:
         lines.append("  (No tasks could be placed)")
     else:
-        header = f"  {'Start':<16} {'End':<16} {'Dur':<6} {'Score':<6} {'Task Title'}"
+        if use_12hr:
+            header = f"  {'Start':<21} {'End':<11} {'Dur':<6} {'Score':<6} {'Task Title'}"
+        else:
+            header = f"  {'Start':<16} {'End':<16} {'Dur':<6} {'Score':<6} {'Task Title'}"
         lines.append(header)
         lines.append("  " + "-" * 76)
         for p in plan.placed_tasks:
-            s_str = p.start.strftime("%Y-%m-%d %H:%M")
-            e_str = p.end.strftime("%H:%M")
-            dur = int((p.end - p.start).total_seconds() // 60)
-            lines.append(
-                f"  {s_str:<16} {e_str:<16} {f'{dur}m':<6} {p.priority_score:<6.2f} {p.task.title}"
-            )
+            if use_12hr:
+                s_str = p.start.strftime("%Y-%m-%d %I:%M %p")
+                e_str = p.end.strftime("%I:%M %p")
+                lines.append(
+                    f"  {s_str:<21} {e_str:<11} {f'{dur(p)}m':<6} {p.priority_score:<6.2f} {p.task.title}"
+                )
+            else:
+                s_str = p.start.strftime("%Y-%m-%d %H:%M")
+                e_str = p.end.strftime("%H:%M")
+                lines.append(
+                    f"  {s_str:<16} {e_str:<16} {f'{dur(p)}m':<6} {p.priority_score:<6.2f} {p.task.title}"
+                )
 
     # 2. Unplaced Tasks
     lines.append("\n[ UNPLACED TASKS ]")
@@ -70,12 +79,20 @@ def format_schedule_diff(plan: SchedulePlan) -> str:
         lines.append("  (Calendar is fully packed - 0 free minutes remaining)")
     else:
         for s in plan.remaining_slots:
-            s_str = s.start.strftime("%Y-%m-%d %H:%M")
-            e_str = s.end.strftime("%H:%M")
+            if use_12hr:
+                s_str = s.start.strftime("%Y-%m-%d %I:%M %p")
+                e_str = s.end.strftime("%I:%M %p")
+            else:
+                s_str = s.start.strftime("%Y-%m-%d %H:%M")
+                e_str = s.end.strftime("%H:%M")
             lines.append(f"  - {s_str} -> {e_str} ({s.duration_minutes} mins)")
 
     lines.append("=" * 80)
     return "\n".join(lines)
+
+
+def dur(p: PlacedTask) -> int:
+    return int((p.end - p.start).total_seconds() // 60)
 
 
 class AutonomousScheduler:
@@ -108,6 +125,8 @@ class AutonomousScheduler:
         weights: ScoringWeights = ScoringWeights(),
         profiles: Optional[Dict[str, PreferenceProfile]] = None,
         now: Optional[datetime] = None,
+        daily_start_time: Optional[time] = None,
+        daily_end_time: Optional[time] = None,
     ) -> SchedulePlan:
         """
         Generates a schedule plan without mutating external state.
@@ -153,15 +172,21 @@ class AutonomousScheduler:
             free_slots = []
             current_day = start_window.date()
             final_day = end_window.date()
-            start_time = start_window.time()
-            end_time = end_window.time()
+            d_start_time = daily_start_time or start_window.time()
+            d_end_time = daily_end_time or end_window.time()
 
             while current_day <= final_day:
-                day_start = datetime.combine(current_day, start_time, tzinfo=self.tz)
-                if start_time < end_time:
-                    day_end = datetime.combine(current_day, end_time, tzinfo=self.tz)
+                day_start = datetime.combine(current_day, d_start_time, tzinfo=self.tz)
+                if d_start_time < d_end_time:
+                    day_end = datetime.combine(current_day, d_end_time, tzinfo=self.tz)
                 else:
-                    day_end = datetime.combine(current_day + timedelta(days=1), end_time, tzinfo=self.tz)
+                    day_end = datetime.combine(current_day + timedelta(days=1), d_end_time, tzinfo=self.tz)
+
+                # Clamp day boundaries to overall window [start_window, end_window]
+                if day_start < start_window:
+                    day_start = start_window
+                if day_end > end_window:
+                    day_end = end_window
 
                 # For current day, start time window only begins from now
                 if current_day == now.date() and day_start < now:

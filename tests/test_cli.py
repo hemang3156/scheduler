@@ -265,6 +265,7 @@ def test_cli_main_clamps_start_window_to_now_for_today(mock_extract, mock_schedu
     mock_scheduler.generate_plan.assert_called_once()
     call_kwargs = mock_scheduler.generate_plan.call_args[1]
     assert call_kwargs["start_window"] == simulated_now
+    assert call_kwargs["end_window"] == simulated_now + dt.timedelta(hours=24)
     assert call_kwargs["now"] == simulated_now
 
 
