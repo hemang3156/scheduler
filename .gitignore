@@ -16,10 +16,7 @@ data/API_tokens_values/
 data/clientJson/
 data/export/
 processed_ids.json
-redundant/API_tokens_values/
-redundant/clientJson/
-redundant/export/
-redundant/processed_ids.json
+redundant/
 
 .uv-cache/
 CODEX.md
