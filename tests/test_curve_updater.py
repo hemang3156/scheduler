@@ -28,6 +28,9 @@ def test_build_curve_evolution_prompt():
     assert "2026-11-07 20:00" in prompt
     assert "routine" in prompt
     assert "45 minutes" in prompt
+    assert "Do not greedily polarize weights" in prompt
+    assert "slots too low in weights unless there is no choice" in prompt
+
 
 
 def test_evolve_curve_with_mock_llm(tmp_path, monkeypatch):

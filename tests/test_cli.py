@@ -249,3 +249,28 @@ def test_interactive_mode_date_range(mock_input, mock_extract, mock_scheduler_cl
     call_kwargs = mock_scheduler_instance.generate_plan.call_args[1]
     assert call_kwargs["start_window"].date() == dt.date(2026, 12, 1)
     assert call_kwargs["end_window"].date() == dt.date(2026, 12, 5)
+
+
+@patch("src.interfaces.cli.AutonomousScheduler")
+@patch("src.interfaces.cli.extract_and_score_notes")
+def test_cli_main_clamps_start_window_to_now_for_today(mock_extract, mock_scheduler_cls):
+    """When scheduling for today, start_window must begin from now, not start_hour."""
+    mock_extract.return_value = []
+    mock_scheduler = MagicMock()
+    mock_scheduler_cls.return_value = mock_scheduler
+
+    simulated_now = dt.datetime(2026, 11, 9, 14, 30, tzinfo=TZ)
+    main(["Guitar", "practice", "--dry-run"], now=simulated_now)
+
+    mock_scheduler.generate_plan.assert_called_once()
+    call_kwargs = mock_scheduler.generate_plan.call_args[1]
+    assert call_kwargs["start_window"] == simulated_now
+    assert call_kwargs["now"] == simulated_now
+
+
+def test_cli_main_rejects_past_date():
+    """Target date in the past must fail with SystemExit."""
+    simulated_now = dt.datetime(2026, 11, 9, 14, 30, tzinfo=TZ)
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--date", "2026-11-01", "--dry-run"], now=simulated_now)
+    assert exc_info.value.code == 1

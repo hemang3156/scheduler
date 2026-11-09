@@ -94,11 +94,14 @@ def _ask_multiline(prompt: str) -> str:
     return "\n".join(lines)
 
 
-def interactive_mode():
+def interactive_mode(now: dt.datetime | None = None):
     """Guided wizard for non-technical users. No flags, no jargon."""
     _banner()
     tz = ZoneInfo(TIMEZONE)
-    now = dt.datetime.now(tz)
+    if now is None:
+        now = dt.datetime.now(tz).replace(microsecond=0)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=tz)
 
     # ── Step 1: Select date or date range ────────────────────────────
     date_mode = _ask_choice(
@@ -171,6 +174,18 @@ def interactive_mode():
     start_window = dt.datetime.combine(initial_date, dt.time(start_hour, 0), tzinfo=tz)
     end_window = dt.datetime.combine(final_date, dt.time(end_hour, 0), tzinfo=tz)
 
+    if initial_date == now.date() and start_window < now:
+        start_window = now
+
+    if initial_date == final_date and start_window >= end_window:
+        _error_exit(
+            f"Start window ({start_window.strftime('%H:%M')}) is at or after end window ({end_window.strftime('%H:%M')}).",
+            "Today's daily window has ended. Choose tomorrow or a future date range.",
+        )
+    elif initial_date < final_date and now >= dt.datetime.combine(initial_date, dt.time(end_hour, 0), tzinfo=tz):
+        initial_date = initial_date + dt.timedelta(days=1)
+        start_window = dt.datetime.combine(initial_date, dt.time(start_hour, 0), tzinfo=tz)
+
     # ── Step 3: Collect tasks ────────────────────────────────────────
     notes_text = _ask_multiline(
         "What do you want to schedule? Write your tasks in plain English"
@@ -240,6 +255,7 @@ def interactive_mode():
         end_window=end_window,
         existing_events=existing_events,
         buffer_minutes=5,
+        now=now,
     )
 
     # ── Step 6: Show results ─────────────────────────────────────────
@@ -391,16 +407,19 @@ def _should_use_interactive(args) -> bool:
     return True
 
 
-def main(argv=None):
+def main(argv=None, now: dt.datetime | None = None):
     args = parse_args(argv)
 
     # ── Interactive wizard shortcut ──────────────────────────────────
     if _should_use_interactive(args):
-        interactive_mode()
+        interactive_mode(now=now)
         return
 
     tz = ZoneInfo(TIMEZONE)
-    now = dt.datetime.now(tz)
+    if now is None:
+        now = dt.datetime.now(tz).replace(microsecond=0)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=tz)
 
     if args.tomorrow:
         initial_date = (now + dt.timedelta(days=1)).date()
@@ -433,14 +452,29 @@ def main(argv=None):
         initial_date = now.date()
         final_date = initial_date
 
+    if final_date < now.date():
+        _error_exit(
+            f"Target date ({final_date}) is in the past.",
+            "Scheduling is only permitted for the current time onward.",
+        )
+
+    if initial_date < now.date():
+        initial_date = now.date()
+
     start_window = dt.datetime.combine(initial_date, dt.time(args.start_hour, 0), tzinfo=tz)
     end_window = dt.datetime.combine(final_date, dt.time(args.end_hour, 0), tzinfo=tz)
 
-    if start_window >= end_window:
+    if initial_date == now.date() and start_window < now:
+        start_window = now
+
+    if initial_date == final_date and start_window >= end_window:
         _error_exit(
-            f"Start window ({start_window.strftime('%Y-%m-%d %H:%M')}) must be before end window ({end_window.strftime('%Y-%m-%d %H:%M')}).",
-            "Check your dates and --start-hour / --end-hour values.",
+            f"Start window ({start_window.strftime('%Y-%m-%d %H:%M')}) is at or after end window ({end_window.strftime('%H:%M')}).",
+            "Today's scheduling window has ended. Use --tomorrow to schedule for tomorrow, or specify a later --end-hour.",
         )
+    elif initial_date < final_date and now >= dt.datetime.combine(initial_date, dt.time(args.end_hour, 0), tzinfo=tz):
+        initial_date = initial_date + dt.timedelta(days=1)
+        start_window = dt.datetime.combine(initial_date, dt.time(args.start_hour, 0), tzinfo=tz)
 
     print("\n" + "=" * 80)
     print("      AUTONOMOUS CALENDAR SCHEDULER — INITIALIZING ENGINE")
@@ -528,6 +562,7 @@ def main(argv=None):
         end_window=end_window,
         existing_events=existing_events,
         buffer_minutes=args.buffer,
+        now=now,
     )
 
     # Step 3: Render Diff

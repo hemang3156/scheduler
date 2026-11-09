@@ -107,6 +107,7 @@ class AutonomousScheduler:
         min_slot_duration: int = 15,
         weights: ScoringWeights = ScoringWeights(),
         profiles: Optional[Dict[str, PreferenceProfile]] = None,
+        now: Optional[datetime] = None,
     ) -> SchedulePlan:
         """
         Generates a schedule plan without mutating external state.
@@ -118,6 +119,11 @@ class AutonomousScheduler:
         if end_window.tzinfo is None:
             end_window = end_window.replace(tzinfo=self.tz)
 
+        if now is None:
+            now = datetime.now(self.tz).replace(microsecond=0)
+        elif now.tzinfo is None:
+            now = now.replace(tzinfo=self.tz)
+
         # 1. Fetch commitments
         if existing_events is None:
             if self.calendar_client is not None:
@@ -127,13 +133,21 @@ class AutonomousScheduler:
 
         # 2. Find free gaps (single-day or multi-day range)
         if start_window.date() == end_window.date():
-            free_slots = find_free_slots(
-                events=existing_events,
-                start=start_window,
-                end=end_window,
-                duration_min=min_slot_duration,
-                buffer_minutes=0,
-            )
+            # For current day, start time window only begins from now
+            effective_start = start_window
+            if effective_start.date() == now.date() and effective_start < now:
+                effective_start = now
+
+            if effective_start >= end_window:
+                free_slots = []
+            else:
+                free_slots = find_free_slots(
+                    events=existing_events,
+                    start=effective_start,
+                    end=end_window,
+                    duration_min=min_slot_duration,
+                    buffer_minutes=0,
+                )
         else:
             # Multi-day range: generate free slots for each day's working window
             free_slots = []
@@ -149,15 +163,38 @@ class AutonomousScheduler:
                 else:
                     day_end = datetime.combine(current_day + timedelta(days=1), end_time, tzinfo=self.tz)
 
-                daily_slots = find_free_slots(
-                    events=existing_events,
-                    start=day_start,
-                    end=day_end,
-                    duration_min=min_slot_duration,
-                    buffer_minutes=0,
-                )
-                free_slots.extend(daily_slots)
+                # For current day, start time window only begins from now
+                if current_day == now.date() and day_start < now:
+                    day_start = now
+
+                if day_start < day_end:
+                    daily_slots = find_free_slots(
+                        events=existing_events,
+                        start=day_start,
+                        end=day_end,
+                        duration_min=min_slot_duration,
+                        buffer_minutes=0,
+                    )
+                    free_slots.extend(daily_slots)
                 current_day += timedelta(days=1)
+
+        # Filter out any slots whose end_time is before or at time_now; clip slots crossing now
+        valid_slots: List[TimeSlot] = []
+        for slot in free_slots:
+            if slot.end <= now:
+                continue
+            if slot.start < now:
+                clipped_duration = int((slot.end - now).total_seconds() // 60)
+                if clipped_duration >= min_slot_duration:
+                    valid_slots.append(
+                        TimeSlot(
+                            start=now,
+                            end=slot.end,
+                            duration_minutes=clipped_duration,
+                        )
+                    )
+            else:
+                valid_slots.append(slot)
 
         # 3. Load or use provided preference profiles
         resolved_profiles = {}
@@ -173,7 +210,7 @@ class AutonomousScheduler:
         # 4. Optimize placement
         plan = optimize_schedule(
             tasks=tasks,
-            available_slots=free_slots,
+            available_slots=valid_slots,
             weights=weights,
             task_buffer_minutes=buffer_minutes,
             min_slot_duration=min_slot_duration,

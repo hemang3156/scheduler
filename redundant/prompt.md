@@ -46,6 +46,10 @@ Your task is to evaluate, calibrate, and augment each item with operational sche
 6. **scoring_rationale (string)**:
    - Exactly one concise sentence explaining why the specific importance, urgency, and mobility values were assigned.
 
+7. **Preference & Slot Guidelines**:
+   - Do not greedily follow preference weights.
+   - Do not recommend or anchor events in slots too low in preference weights unless there is no alternative choice.
+
 ### Strict Output Contract
 - Output ONLY a valid JSON array of objects.
 - Each object in the array must strictly contain these keys:

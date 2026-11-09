@@ -197,3 +197,29 @@ def test_invalid_window_returns_empty(base_day: datetime):
 
     slots = find_free_slots(events=[], start=start, end=end)
     assert slots == []
+
+
+def test_all_day_event_ignored_when_finding_free_slots(window: tuple[datetime, datetime], make_event):
+    start, end = window
+    all_day_event = CalendarEvent(
+        id="all_day_bday",
+        summary="Tanvi's Birthday",
+        start=start.replace(hour=0, minute=0),
+        end=start.replace(hour=0, minute=0) + pytest.importorskip("datetime").timedelta(days=1),
+        is_all_day=True,
+    )
+    # Timed event in the afternoon
+    timed_event = make_event("Team Sync", 14, 0, 15, 0, event_id="ev_timed")
+
+    slots = find_free_slots(events=[all_day_event, timed_event], start=start, end=end)
+
+    # All-day event must not block the day: only timed_event splits the 09:00 -> 17:00 window
+    assert len(slots) == 2
+    assert slots[0].start == start
+    assert slots[0].end == timed_event.start
+    assert slots[0].duration_minutes == 300  # 09:00 to 14:00 (5 hours)
+
+    assert slots[1].start == timed_event.end
+    assert slots[1].end == end
+    assert slots[1].duration_minutes == 120  # 15:00 to 17:00 (2 hours)
+

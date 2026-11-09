@@ -22,7 +22,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 PROMPT_PATH = PROJECT_ROOT / "redundant" / "prompt.md"
 DEFAULT_RESPONSE_PATH = PROJECT_ROOT / "redundant" / "export" / "response.json"
 TIMEZONE = "Asia/Kolkata"
-DEFAULT_MODELS = ("gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash")
+DEFAULT_MODELS = (
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+)
 
 
 def _get_api_key() -> str:

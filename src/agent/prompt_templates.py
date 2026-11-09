@@ -19,13 +19,16 @@ Instructions:
    - "title": Clean, concise title.
    - "event_type": One of "lecture", "meeting", "routine", "evaluative", "others".
    - "start": An explicit ISO local datetime (YYYY-MM-DDTHH:MM) if specifically scheduled, otherwise null.
-   - "end": An explicit ISO local deadline or end datetime (YYYY-MM-DDTHH:MM) if stated, otherwise null.
-   - "estimated_duration": Realistic duration in minutes (positive integer, minimum 15 minutes unless trivial).
+   - "end": An explicit ISO local deadline or end datetime (YYYY-MM-DDTHH:MM) ONLY if an explicit deadline or end time was stated with keywords like 'by', 'before', 'until', 'to'. If only a start or preferred time is mentioned (e.g. '10am'), set "end" to null.
+   - "estimated_duration": Realistic duration in minutes (positive integer, minimum 15 minutes unless trivial). Default self-study sessions to 45-60 minutes unless stated otherwise. Quick checks/reminders to 15-30 minutes.
    - "importance": Integer from 1 (trivial) to 5 (critical deliverable/health/high-stakes).
    - "urgency": Integer from 1 (flexible/someday) to 5 (due today/ASAP).
    - "is_movable": False for fixed meetings or scheduled classes with others; True for solo work, practice, chores.
    - "priority_category": "urgent", "important", "routine", or "low_priority".
    - "scoring_rationale": One concise sentence explaining the scores.
+3. Preference & Slot Guidelines:
+   - Do not greedily follow preference weights over actual user intent.
+   - Do not anchor or constrain events into slots that are too low in preference weights or unsuitable, unless there is no choice or an explicit deadline demands it.
 
 Output format:
 Return a JSON object conforming strictly to the ScoredTaskList schema.
@@ -73,6 +76,10 @@ Your task is to evaluate, calibrate, and augment each item with operational sche
 6. **scoring_rationale (string)**:
    - One concise sentence explaining why the scores and mobility were assigned.
 
+7. **Preference & Slot Guidelines**:
+   - Do not greedily follow preference weights.
+   - Do not recommend or anchor events in slots too low in preference weights unless there is no alternative choice.
+
 ### Input Data
 {response_json}
 """
@@ -101,10 +108,14 @@ The user has scheduled/confirmed a calendar event. Your task is to inspect the e
      - Boost the scheduled hour window significantly (e.g., 0.8 to 1.0).
      - Provide a smooth transition to adjacent hours.
    - If this is a recurring observation (`updated_count > 0`), reinforce the hours where the event occurred with an incremental boost while preserving previously learned shapes.
-2. **Strict Range Requirements**:
+2. **Preference Curve Calibration Principles**:
+   - Do not greedily polarize weights (e.g. driving viable daytime hours to near zero).
+   - Maintain moderate, viable baseline weights across usable daytime hours so the scheduler does not greedily over-index on a single hour.
+   - Keep truly unfavorable or disruptive slots sufficiently low in weight so the optimizer will not put events into slots too low in weights unless there is no choice.
+3. **Strict Range Requirements**:
    - Every single hourly weight in the output list MUST strictly be a float between 0.0 and 1.0.
    - Output must contain EXACTLY 24 floats representing hours 0 through 23 in chronological order.
-3. **Format**:
+4. **Format**:
    - Return a JSON object strictly conforming to the UpdatedCurveResponse schema:
      - "hourly_weights": array of exactly 24 floats.
      - "update_rationale": one concise sentence explaining how the curve was adjusted.

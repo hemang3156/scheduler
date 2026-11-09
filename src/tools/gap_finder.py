@@ -22,16 +22,20 @@ def find_free_slots(
     sorted_events = sorted(events, key=attrgetter("start"))
 
     for ev in sorted_events:
-        # Ignore events completely outside the window
-        if ev.end <= start or ev.start >= end:
+        # Simple if/else: ignore all-day events (e.g. birthdays, holidays) when finding free slots
+        if getattr(ev, "is_all_day", False):
             continue
-        
-        # Clip event boundaries to the window
-        # Add buffer before and after the event
-        busy_start = max(ev.start - buffer, start)
-        busy_end = min(ev.end + buffer, end)
-        
-        busy_intervals.append([busy_start, busy_end])
+        else:
+            # Ignore events completely outside the window
+            if ev.end <= start or ev.start >= end:
+                continue
+
+            # Clip event boundaries to the window
+            # Add buffer before and after the event
+            busy_start = max(ev.start - buffer, start)
+            busy_end = min(ev.end + buffer, end)
+
+            busy_intervals.append([busy_start, busy_end])
 
     # 2. Merge overlapping or adjacent busy intervals
     merged_busy: list[list[datetime]] = []
