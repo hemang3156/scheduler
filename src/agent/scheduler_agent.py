@@ -127,6 +127,7 @@ class AutonomousScheduler:
         now: Optional[datetime] = None,
         daily_start_time: Optional[time] = None,
         daily_end_time: Optional[time] = None,
+        continuous_window: bool = False,
     ) -> SchedulePlan:
         """
         Generates a schedule plan without mutating external state.
@@ -150,11 +151,11 @@ class AutonomousScheduler:
             else:
                 existing_events = []
 
-        # 2. Find free gaps (single-day or multi-day range)
-        if start_window.date() == end_window.date():
-            # For current day, start time window only begins from now
+        # 2. Find free gaps (continuous single window, single-day, or multi-day range)
+        if continuous_window or start_window.date() == end_window.date():
+            # For current day or continuous window, start time window only begins from now
             effective_start = start_window
-            if effective_start.date() == now.date() and effective_start < now:
+            if effective_start < now:
                 effective_start = now
 
             if effective_start >= end_window:

@@ -346,13 +346,13 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument(
         "--start-hour",
         type=int,
-        default=9,
+        default=None,
         help="Daily starting hour in 24-hour format (default: 9 for 09:00).",
     )
     parser.add_argument(
         "--end-hour",
         type=int,
-        default=21,
+        default=None,
         help="Daily ending hour in 24-hour format (default: 21 for 21:00).",
     )
     parser.add_argument(
@@ -464,27 +464,37 @@ def main(argv=None, now: dt.datetime | None = None):
     if initial_date < now.date():
         initial_date = now.date()
 
-    daily_start = dt.time(args.start_hour, 0)
-    daily_end = dt.time(args.end_hour, 0)
-
-    if is_default_range:
+    if is_default_range and args.start_hour is None and args.end_hour is None:
+        daily_start = None
+        daily_end = None
+        continuous_window = True
         start_window = now
         end_window = now + dt.timedelta(hours=24)
     else:
-        start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
-        end_window = dt.datetime.combine(final_date, daily_end, tzinfo=tz)
+        continuous_window = False
+        start_hour = args.start_hour if args.start_hour is not None else 9
+        end_hour = args.end_hour if args.end_hour is not None else 21
+        daily_start = dt.time(start_hour, 0)
+        daily_end = dt.time(end_hour, 0)
 
-        if initial_date == now.date() and start_window < now:
+        if is_default_range:
             start_window = now
-
-        if initial_date == final_date and start_window >= end_window:
-            _error_exit(
-                f"Start window ({start_window.strftime('%Y-%m-%d %I:%M %p')}) is at or after end window ({end_window.strftime('%I:%M %p')}).",
-                "Today's scheduling window has ended. Use --tomorrow to schedule for tomorrow, or specify a later --end-hour.",
-            )
-        elif initial_date < final_date and now >= dt.datetime.combine(initial_date, daily_end, tzinfo=tz):
-            initial_date = initial_date + dt.timedelta(days=1)
+            end_window = now + dt.timedelta(hours=24)
+        else:
             start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
+            end_window = dt.datetime.combine(final_date, daily_end, tzinfo=tz)
+
+            if initial_date == now.date() and start_window < now:
+                start_window = now
+
+            if initial_date == final_date and start_window >= end_window:
+                _error_exit(
+                    f"Start window ({start_window.strftime('%Y-%m-%d %I:%M %p')}) is at or after end window ({end_window.strftime('%I:%M %p')}).",
+                    "Today's scheduling window has ended. Use --tomorrow to schedule for tomorrow, or specify a later --end-hour.",
+                )
+            elif initial_date < final_date and now >= dt.datetime.combine(initial_date, daily_end, tzinfo=tz):
+                initial_date = initial_date + dt.timedelta(days=1)
+                start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
 
     print("\n" + "=" * 80)
     print("      AUTONOMOUS CALENDAR SCHEDULER — INITIALIZING ENGINE")
@@ -492,7 +502,10 @@ def main(argv=None, now: dt.datetime | None = None):
     print(f"Timezone:          {TIMEZONE}")
     if is_default_range:
         print(f"Target Window:     {start_window.strftime('%Y-%m-%d %I:%M %p')} -> {end_window.strftime('%Y-%m-%d %I:%M %p')} (Next 24 Hours)")
-        print(f"Daily Operating:   {daily_start.strftime('%I:%M %p')} -> {daily_end.strftime('%I:%M %p')}")
+        if daily_start is not None and daily_end is not None:
+            print(f"Daily Operating:   {daily_start.strftime('%I:%M %p')} -> {daily_end.strftime('%I:%M %p')}")
+        else:
+            print("Daily Operating:   Continuous 24-Hour Rolling Window")
     elif initial_date == final_date:
         print(f"Target Date:       {initial_date.isoformat()} ({'Tomorrow' if args.tomorrow else 'Today'})")
         print(f"Scheduling Window: {start_window.strftime('%Y-%m-%d %I:%M %p')} -> {end_window.strftime('%I:%M %p')}")
@@ -578,6 +591,7 @@ def main(argv=None, now: dt.datetime | None = None):
         now=now,
         daily_start_time=daily_start,
         daily_end_time=daily_end,
+        continuous_window=continuous_window,
     )
 
     # Step 3: Render Diff

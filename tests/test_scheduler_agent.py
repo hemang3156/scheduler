@@ -288,3 +288,61 @@ def test_slots_crossing_now_are_clipped():
     assert placed.start >= now_time
     assert placed.start == now_time
     assert placed.end == now_time + timedelta(minutes=60)
+
+
+def test_continuous_24h_window_recognizes_late_evening_slots():
+    """Verify that continuous_window=True preserves late-night windows across midnight (e.g. between dinner and sleep)."""
+    scheduler = AutonomousScheduler()
+
+    now_time = datetime(2026, 11, 9, 19, 45, tzinfo=TZ)
+    start_window = now_time
+    end_window = now_time + timedelta(hours=24)
+
+    # Dinner: 20:30 -> 21:30 tonight
+    # Sleep: 01:00 -> 08:00 tomorrow morning
+    existing_events = [
+        CalendarEvent(
+            id="dinner",
+            summary="Dinner",
+            start=datetime(2026, 11, 9, 20, 30, tzinfo=TZ),
+            end=datetime(2026, 11, 9, 21, 30, tzinfo=TZ),
+        ),
+        CalendarEvent(
+            id="sleep",
+            summary="Sleep",
+            start=datetime(2026, 11, 10, 1, 0, tzinfo=TZ),
+            end=datetime(2026, 11, 10, 8, 0, tzinfo=TZ),
+        ),
+    ]
+
+    # Task: Study session from 22:00 to 23:30 (90 mins)
+    task = ScoredTask(
+        title="krd study",
+        event_type=EventType.ROUTINE,
+        start=DateTimeAnchor(dateTime="2026-11-09T22:00"),
+        end=DateTimeAnchor(dateTime="2026-11-09T23:30"),
+        estimated_duration=90,
+        importance=4,
+        urgency=5,
+        is_movable=True,
+        priority_category=PriorityCategory.URGENT,
+        scoring_rationale="Study session tonight",
+    )
+
+    plan = scheduler.generate_plan(
+        tasks=[task],
+        start_window=start_window,
+        end_window=end_window,
+        existing_events=existing_events,
+        buffer_minutes=5,
+        profiles={},
+        now=now_time,
+        continuous_window=True,
+    )
+
+    assert len(plan.placed_tasks) == 1
+    placed = plan.placed_tasks[0]
+    assert placed.task.title == "krd study"
+    assert placed.start == datetime(2026, 11, 9, 22, 0, tzinfo=TZ)
+    assert placed.end == datetime(2026, 11, 9, 23, 30, tzinfo=TZ)
+

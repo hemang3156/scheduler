@@ -1,11 +1,13 @@
+import datetime as dt
 import pytest
 
-from src.core.models import TaskDraft
+from src.core.models import TaskDraft, ScoredTask, DateTimeAnchor, EventType, PriorityCategory
 from src.core.scoring import (
     ScoringWeights,
     calculate_priority_score,
     sort_tasks_by_priority,
 )
+from src.agent.scorer import sanitize_task_anchors
 
 
 def test_priority_score_calculation_bounds():
@@ -34,3 +36,42 @@ def test_sort_tasks_by_priority():
     assert sorted_tasks[0].title == "Exam Prep"
     assert sorted_tasks[1].title == "Grocery Run"
     assert sorted_tasks[2].title == "Browse memes"
+
+
+def test_sanitize_task_anchors_midnight_rollover():
+    """When end time is earlier in the day than start time, end date must roll forward by 1 day."""
+    task = ScoredTask(
+        title="Late Study",
+        event_type=EventType.ROUTINE,
+        start=DateTimeAnchor(dateTime="2026-11-09T22:45"),
+        end=DateTimeAnchor(dateTime="2026-11-09T00:15"),
+        estimated_duration=90,
+        importance=4,
+        urgency=5,
+        is_movable=True,
+        priority_category=PriorityCategory.URGENT,
+        scoring_rationale="Study session across midnight",
+    )
+    sanitized = sanitize_task_anchors(task, reference_now=dt.datetime(2026, 11, 9, 22, 20))
+    assert sanitized.start.dateTime == "2026-11-09T22:45"
+    assert sanitized.end.dateTime == "2026-11-10T00:15"
+
+
+def test_sanitize_task_anchors_12am_confusion_and_pm_shift():
+    """Corrects 10:45 AM -> 10:45 PM when running late at night, and 12:15 PM -> 12:15 AM next day."""
+    task = ScoredTask(
+        title="Late Study",
+        event_type=EventType.ROUTINE,
+        start=DateTimeAnchor(dateTime="2026-11-09T10:45"),
+        end=DateTimeAnchor(dateTime="2026-11-09T12:15"),
+        estimated_duration=90,
+        importance=4,
+        urgency=5,
+        is_movable=True,
+        priority_category=PriorityCategory.URGENT,
+        scoring_rationale="Late night study with ambiguous AM/PM",
+    )
+    sanitized = sanitize_task_anchors(task, reference_now=dt.datetime(2026, 11, 9, 22, 20))
+    assert sanitized.start.dateTime == "2026-11-09T22:45"
+    assert sanitized.end.dateTime == "2026-11-10T00:15"
+

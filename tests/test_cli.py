@@ -194,7 +194,8 @@ def test_interactive_mode_preview_only(mock_input, mock_extract, mock_scheduler_
         "1",                    # preview only
     ]
 
-    interactive_mode()
+    simulated_now = dt.datetime(2026, 11, 9, 10, 0, tzinfo=TZ)
+    interactive_mode(now=simulated_now)
 
     mock_extract.assert_called_once()
     mock_scheduler_cls.assert_called_once_with(calendar_client=None)
@@ -242,7 +243,8 @@ def test_interactive_mode_date_range(mock_input, mock_extract, mock_scheduler_cl
         "1",                                # Preview only
     ]
 
-    interactive_mode()
+    simulated_now = dt.datetime(2026, 11, 9, 10, 0, tzinfo=TZ)
+    interactive_mode(now=simulated_now)
 
     mock_extract.assert_called_once()
     mock_scheduler_instance.generate_plan.assert_called_once()
@@ -267,6 +269,27 @@ def test_cli_main_clamps_start_window_to_now_for_today(mock_extract, mock_schedu
     assert call_kwargs["start_window"] == simulated_now
     assert call_kwargs["end_window"] == simulated_now + dt.timedelta(hours=24)
     assert call_kwargs["now"] == simulated_now
+    assert call_kwargs["continuous_window"] is True
+    assert call_kwargs["daily_start_time"] is None
+    assert call_kwargs["daily_end_time"] is None
+
+
+@patch("src.interfaces.cli.AutonomousScheduler")
+@patch("src.interfaces.cli.extract_and_score_notes")
+def test_cli_main_disables_continuous_window_when_hours_explicitly_set(mock_extract, mock_scheduler_cls):
+    """When start_hour or end_hour are explicitly given, continuous_window should be disabled."""
+    mock_extract.return_value = []
+    mock_scheduler = MagicMock()
+    mock_scheduler_cls.return_value = mock_scheduler
+
+    simulated_now = dt.datetime(2026, 11, 9, 14, 30, tzinfo=TZ)
+    main(["Guitar", "practice", "--start-hour", "10", "--end-hour", "20", "--dry-run"], now=simulated_now)
+
+    mock_scheduler.generate_plan.assert_called_once()
+    call_kwargs = mock_scheduler.generate_plan.call_args[1]
+    assert call_kwargs["continuous_window"] is False
+    assert call_kwargs["daily_start_time"] == dt.time(10, 0)
+    assert call_kwargs["daily_end_time"] == dt.time(20, 0)
 
 
 def test_cli_main_rejects_past_date():

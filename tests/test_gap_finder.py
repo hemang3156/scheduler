@@ -223,3 +223,21 @@ def test_all_day_event_ignored_when_finding_free_slots(window: tuple[datetime, d
     assert slots[1].end == end
     assert slots[1].duration_minutes == 120  # 15:00 to 17:00 (2 hours)
 
+
+def test_end_of_last_event_to_end_window_is_slot(window: tuple[datetime, datetime], make_event):
+    """Verify that when the last event finishes before end_window, the remaining gap to end_window is returned as a slot."""
+    start, end = window
+    # Event ends at 15:00; end_window is 17:00
+    last_event = make_event("Late Afternoon Meeting", 14, 0, 15, 0)
+    slots = find_free_slots(events=[last_event], start=start, end=end, duration_min=15)
+
+    assert len(slots) == 2
+    assert slots[0].start == start
+    assert slots[0].end == last_event.start
+
+    # Failsafe: gap from end of last event (15:00) to end_window (17:00)
+    assert slots[1].start == last_event.end
+    assert slots[1].end == end
+    assert slots[1].duration_minutes == 120
+
+
