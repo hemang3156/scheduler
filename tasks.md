@@ -1,1 +1,0 @@
-data/daily_notes.md

@@ -1,15 +1,6 @@
 from unittest.mock import patch, MagicMock
 import pytest
-from src.interfaces.cli import (
-    parse_args,
-    main,
-    _should_use_interactive,
-    interactive_mode,
-    _error_exit,
-    ScheduleConfig,
-    run_pipeline,
-    parse_cli_config,
-)
+from src.interfaces.cli import parse_args, main, _should_use_interactive, interactive_mode, _error_exit
 from src.core.models import ScoredTask, EventType, PriorityCategory, DateTimeAnchor, SchedulePlan, PlacedTask
 import datetime as dt
 from zoneinfo import ZoneInfo
@@ -204,7 +195,7 @@ def test_interactive_mode_preview_only(mock_input, mock_extract, mock_scheduler_
     ]
 
     simulated_now = dt.datetime(2026, 11, 9, 10, 0, tzinfo=TZ)
-    main(["--interactive"], now=simulated_now)
+    interactive_mode(now=simulated_now)
 
     mock_extract.assert_called_once()
     mock_scheduler_cls.assert_called_once_with(calendar_client=None)
@@ -253,52 +244,13 @@ def test_interactive_mode_date_range(mock_input, mock_extract, mock_scheduler_cl
     ]
 
     simulated_now = dt.datetime(2026, 11, 9, 10, 0, tzinfo=TZ)
-    main(["--interactive"], now=simulated_now)
+    interactive_mode(now=simulated_now)
 
     mock_extract.assert_called_once()
     mock_scheduler_instance.generate_plan.assert_called_once()
     call_kwargs = mock_scheduler_instance.generate_plan.call_args[1]
     assert call_kwargs["start_window"].date() == dt.date(2026, 12, 1)
     assert call_kwargs["end_window"].date() == dt.date(2026, 12, 5)
-
-
-@patch("builtins.input")
-def test_interactive_mode_returns_schedule_config(mock_input):
-    mock_input.side_effect = [
-        "2",                    # Today only
-        "",                     # default time window
-        "Study math 2 hours",  # task input
-        "",                     # empty line
-        "1",                    # preview only
-    ]
-    simulated_now = dt.datetime(2026, 11, 9, 10, 0, tzinfo=TZ)
-    config = interactive_mode(now=simulated_now)
-    assert isinstance(config, ScheduleConfig)
-    assert config.is_interactive is True
-    assert config.task_input == "Study math 2 hours"
-    assert config.dry_run is True
-    assert config.sync is False
-
-
-@patch("src.interfaces.cli.AutonomousScheduler")
-@patch("src.interfaces.cli.extract_and_score_notes")
-def test_run_pipeline_linear_execution(mock_extract, mock_scheduler_cls):
-    mock_extract.return_value = []
-    mock_scheduler = MagicMock()
-    mock_scheduler_cls.return_value = mock_scheduler
-    simulated_now = dt.datetime(2026, 11, 9, 10, 0, tzinfo=TZ)
-    config = ScheduleConfig(
-        start_window=simulated_now,
-        end_window=simulated_now + dt.timedelta(hours=24),
-        initial_date=simulated_now.date(),
-        final_date=simulated_now.date(),
-        task_input="Test task",
-        dry_run=True,
-        now=simulated_now,
-    )
-    plan = run_pipeline(config)
-    mock_extract.assert_called_once_with("Test task")
-    mock_scheduler.generate_plan.assert_called_once()
 
 
 @patch("src.interfaces.cli.AutonomousScheduler")
