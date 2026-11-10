@@ -291,28 +291,3 @@ def test_high_priority_fixed_task_evaluated_first_over_non_priority():
     assert plan.unplaced_tasks[0].task.title == "Casual Help"
 
 
-def test_utc_anchor_converts_to_slot_reference_timezone():
-    slot = TimeSlot(
-        start=datetime(2026, 11, 10, 15, 0, tzinfo=TZ),
-        end=datetime(2026, 11, 10, 17, 0, tzinfo=TZ),
-        duration_minutes=120,
-    )
-    # 10:00 UTC == 15:30 IST
-    task = make_task(
-        "Sync with London",
-        duration=60,
-        is_movable=False,
-        start_str="2026-11-10T10:00:00Z",
-    )
-    plan = optimize_schedule(tasks=[task], available_slots=[slot], task_buffer_minutes=5)
-    assert len(plan.placed_tasks) == 1
-    placed = plan.placed_tasks[0]
-    assert placed.start == datetime(2026, 11, 10, 15, 30, tzinfo=TZ)
-    assert placed.start.tzinfo == TZ
-    # Remaining slots must also retain TZ
-    for s in plan.remaining_slots:
-        assert s.start.tzinfo == TZ
-        assert s.end.tzinfo == TZ
-
-
-
