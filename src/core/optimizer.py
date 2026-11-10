@@ -1,30 +1,102 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 from zoneinfo import ZoneInfo
 
 from src.core.models import (
+    PlacedTask,
+    PreferenceProfile,
+    SchedulePlan,
     ScoredTask,
     TaskDraft,
     TimeSlot,
-    PlacedTask,
     UnplacedTask,
-    SchedulePlan,
-    PreferenceProfile,
 )
 from src.core.scoring import ScoringWeights, calculate_priority_score
 
 
 def _parse_anchor(anchor_str: Optional[str], tz: Optional[ZoneInfo] = None) -> Optional[datetime]:
-    """Parses ISO datetime string and aligns timezone if naive."""
     if not anchor_str:
         return None
     try:
         dt = datetime.fromisoformat(anchor_str)
-        if dt.tzinfo is None and tz is not None:
-            return dt.replace(tzinfo=tz)
+        if tz is not None:
+            return dt.replace(tzinfo=tz) if dt.tzinfo is None else dt.astimezone(tz)
+        if dt.tzinfo is not None:
+            return dt.replace(tzinfo=None)
         return dt
     except (ValueError, TypeError):
         return None
+
+
+@dataclass(frozen=True)
+class _TaskInfo:
+    task: Union[ScoredTask, TaskDraft]
+    duration: int
+    is_movable: bool
+    start_anchor: Optional[datetime]
+    deadline: Optional[datetime]
+    score: float
+
+
+def _carve_slot(
+    slot: TimeSlot,
+    busy_start: datetime,
+    busy_end: datetime,
+    buffer: timedelta,
+    min_duration: int,
+) -> List[TimeSlot]:
+    fragments: List[TimeSlot] = []
+    prefix_mins = int((busy_start - slot.start).total_seconds() // 60)
+    if prefix_mins >= min_duration:
+        fragments.append(TimeSlot(start=slot.start, end=busy_start, duration_minutes=prefix_mins))
+
+    suffix_start = busy_end + buffer
+    if suffix_start < slot.end:
+        suffix_mins = int((slot.end - suffix_start).total_seconds() // 60)
+        if suffix_mins >= min_duration:
+            fragments.append(TimeSlot(start=suffix_start, end=slot.end, duration_minutes=suffix_mins))
+    return fragments
+
+
+def _candidate_starts(
+    slot: TimeSlot,
+    duration: timedelta,
+    anchor: Optional[datetime],
+    profile: Optional[PreferenceProfile],
+) -> List[datetime]:
+    starts = [slot.start]
+    if anchor and slot.start <= anchor and (anchor + duration) <= slot.end:
+        starts.append(anchor)
+
+    if profile and any(w > 0.0 for w in profile.hourly_weights):
+        curr = slot.start.replace(minute=0, second=0, microsecond=0)
+        if curr < slot.start:
+            curr += timedelta(hours=1)
+        while curr + duration <= slot.end:
+            starts.append(curr)
+            curr += timedelta(hours=1)
+
+    return list(dict.fromkeys(starts))
+
+
+def _score_candidate(
+    cand_start: datetime,
+    anchor: Optional[datetime],
+    profile: Optional[PreferenceProfile],
+    ref_start: datetime,
+) -> float:
+    raw_w = profile.get_weight(cand_start.hour) if profile else 0.0
+    willingness = raw_w if raw_w > 0.0 else 0.5
+
+    proximity = 1.0
+    if anchor:
+        hours_diff = abs((cand_start - anchor).total_seconds()) / 3600.0
+        proximity = max(0.1, 1.0 - 0.05 * hours_diff)
+
+    time_offset_hrs = max(0.0, (cand_start - ref_start).total_seconds() / 3600.0)
+    tie_breaker = 1e-4 / (1.0 + time_offset_hrs)
+    return (willingness * proximity) + tie_breaker
 
 
 def optimize_schedule(
@@ -35,16 +107,7 @@ def optimize_schedule(
     min_slot_duration: int = 15,
     profiles: Optional[Dict[str, PreferenceProfile]] = None,
 ) -> SchedulePlan:
-    """
-    Deterministically fits prioritized tasks into available free time slots
-    guided by 24-hour preference willingness curves and proximity anchors.
-
-    1. Separates fixed (pinned) vs movable tasks.
-    2. Places fixed commitments and carves out surrounding free slots.
-    3. Sorts movable tasks by priority score descending (with deadline tie-breakers).
-    4. Evaluates candidate placement hours inside free slots using preference willingness W[h].
-    5. Deducts inter-task buffer and tracks unplaced tasks with diagnostic reasons.
-    """
+    """Fits prioritized tasks into free slots using preference curves and deadline constraints."""
     if not available_slots:
         return SchedulePlan(
             placed_tasks=[],
@@ -59,249 +122,112 @@ def optimize_schedule(
             remaining_slots=[],
         )
 
-    # Detect reference timezone from the first available slot
-    ref_tz = available_slots[0].start.tzinfo if available_slots else None
-    ref_start = available_slots[0].start if available_slots else None
-
-    # Working copy of available slots sorted chronologically
+    ref_tz = available_slots[0].start.tzinfo
+    ref_start = available_slots[0].start
     working_slots: List[TimeSlot] = sorted(available_slots, key=lambda s: s.start)
+    buffer_delta = timedelta(minutes=task_buffer_minutes)
+
+    fixed_tasks: List[_TaskInfo] = []
+    movable_tasks: List[_TaskInfo] = []
+
+    for t in tasks:
+        if isinstance(t, ScoredTask):
+            duration = t.estimated_duration
+            is_movable = t.is_movable
+            s_str = t.start.dateTime if t.start else None
+            e_str = t.end.dateTime if t.end else None
+        else:
+            duration = getattr(t, "estimated_duration", 30) or 30
+            is_movable = getattr(t, "is_movable", True)
+            s_str, e_str = None, None
+
+        info = _TaskInfo(
+            task=t,
+            duration=duration,
+            is_movable=is_movable,
+            start_anchor=_parse_anchor(s_str, ref_tz),
+            deadline=_parse_anchor(e_str, ref_tz),
+            score=calculate_priority_score(t.importance, t.urgency, weights),
+        )
+        if not info.is_movable and info.start_anchor is not None:
+            fixed_tasks.append(info)
+        else:
+            movable_tasks.append(info)
 
     placed_tasks: List[PlacedTask] = []
     unplaced_tasks: List[UnplacedTask] = []
 
-    # Helper to extract task attributes uniformly
-    def get_task_attrs(task: Union[ScoredTask, TaskDraft]):
-        if isinstance(task, ScoredTask):
-            duration = task.estimated_duration
-            is_movable = task.is_movable
-            start_str = task.start.dateTime if task.start else None
-            end_str = task.end.dateTime if task.end else None
-        else:
-            duration = getattr(task, "estimated_duration", 30) or 30
-            is_movable = getattr(task, "is_movable", True)
-            start_str = None
-            end_str = None
+    fixed_tasks.sort(key=lambda t: (-t.score, t.start_anchor.timestamp() if t.start_anchor else 0.0))
 
-        start_dt = _parse_anchor(start_str, ref_tz)
-        deadline_dt = _parse_anchor(end_str, ref_tz)
-        score = calculate_priority_score(task.importance, task.urgency, weights)
-        return duration, is_movable, start_dt, deadline_dt, score
+    for t in fixed_tasks:
+        start_dt = t.start_anchor
+        assert start_dt is not None
+        end_dt = start_dt + timedelta(minutes=t.duration)
 
-    # Partition tasks into fixed (immovable) vs movable
-    fixed_tasks = []
-    movable_tasks = []
+        slot_idx = next(
+            (i for i, s in enumerate(working_slots) if s.start <= start_dt and s.end >= end_dt),
+            None,
+        )
 
-    for task in tasks:
-        dur, movable, start_dt, deadline_dt, score = get_task_attrs(task)
-        if not movable and start_dt is not None:
-            fixed_tasks.append((task, dur, start_dt, score))
-        else:
-            movable_tasks.append((task, dur, start_dt, deadline_dt, score))
+        if slot_idx is not None:
+            target_slot = working_slots.pop(slot_idx)
+            placed_tasks.append(PlacedTask(task=t.task, start=start_dt, end=end_dt, priority_score=t.score))
 
-    buffer_delta = timedelta(minutes=task_buffer_minutes)
-
-    # -----------------------------------------------------------------------
-    # Step 1: Place Fixed / Immovable Tasks (Highest Priority First)
-    # -----------------------------------------------------------------------
-    # Sort fixed tasks primarily by priority score descending (-t[3]), then start time (t[2])
-    # This ensures high-priority fixed commitments are evaluated and placed first,
-    # preventing lower-priority tasks from occupying constrained slots.
-    fixed_tasks.sort(key=lambda t: (-t[3], t[2]))
-
-    for task, duration_m, fixed_start, score in fixed_tasks:
-        fixed_end = fixed_start + timedelta(minutes=duration_m)
-        slot_idx_found = -1
-
-        for i, slot in enumerate(working_slots):
-            if slot.start <= fixed_start and slot.end >= fixed_end:
-                slot_idx_found = i
-                break
-
-        if slot_idx_found != -1:
-            target_slot = working_slots.pop(slot_idx_found)
-            placed_tasks.append(
-                PlacedTask(
-                    task=task,
-                    start=fixed_start,
-                    end=fixed_end,
-                    priority_score=score,
-                )
-            )
-
-            # Carve out prefix (before fixed start) and suffix (after fixed end + buffer)
-            new_fragments = []
-            prefix_mins = int((fixed_start - target_slot.start).total_seconds() // 60)
-            if prefix_mins >= min_slot_duration:
-                new_fragments.append(
-                    TimeSlot(start=target_slot.start, end=fixed_start, duration_minutes=prefix_mins)
-                )
-
-            # If another fixed task is scheduled adjacent to or within buffer of this fixed_end,
-            # do not deduct buffer between them so consecutive fixed blocks don't collide.
             has_adjacent_fixed = any(
-                f_s >= fixed_end and f_s < fixed_end + buffer_delta for _, _, f_s, _ in fixed_tasks
+                f is not t
+                and f.start_anchor is not None
+                and end_dt <= f.start_anchor < end_dt + buffer_delta
+                for f in fixed_tasks
             )
             eff_buffer = timedelta(0) if has_adjacent_fixed else buffer_delta
-            suffix_start = fixed_end + eff_buffer
-            if suffix_start < target_slot.end:
-                suffix_mins = int((target_slot.end - suffix_start).total_seconds() // 60)
-                if suffix_mins >= min_slot_duration:
-                    new_fragments.append(
-                        TimeSlot(start=suffix_start, end=target_slot.end, duration_minutes=suffix_mins)
-                    )
-
-            working_slots.extend(new_fragments)
+            working_slots.extend(_carve_slot(target_slot, start_dt, end_dt, eff_buffer, min_slot_duration))
             working_slots.sort(key=lambda s: s.start)
         else:
             unplaced_tasks.append(
                 UnplacedTask(
-                    task=task,
-                    reason=f"Fixed window {fixed_start.strftime('%Y-%m-%d %H:%M')} overlaps existing calendar event or falls outside free slots",
-                    priority_score=score,
+                    task=t.task,
+                    reason=f"Fixed window {start_dt.strftime('%Y-%m-%d %H:%M')} overlaps existing calendar event or falls outside free slots",
+                    priority_score=t.score,
                 )
             )
 
-    # -----------------------------------------------------------------------
-    # Step 2: Sort Movable Tasks by Priority & Deadlines
-    # -----------------------------------------------------------------------
-    def task_sort_key(item):
-        # item: (task, duration_m, preferred_anchor, deadline_dt, score)
-        task, duration_m, preferred_anchor, deadline_dt, score = item
-        # 1. Higher score first (-score)
-        # 2. Earlier deadline first (or distant future if None)
-        deadline_timestamp = deadline_dt.timestamp() if deadline_dt else float("inf")
-        # 3. Shorter duration first
-        return (-score, deadline_timestamp, duration_m)
+    movable_tasks.sort(
+        key=lambda t: (-t.score, t.deadline.timestamp() if t.deadline else float("inf"), t.duration)
+    )
 
-    movable_tasks.sort(key=task_sort_key)
-
-    # -----------------------------------------------------------------------
-    # Step 3: Gradient-Aware Slot Allocation
-    # -----------------------------------------------------------------------
-    for task, duration_m, preferred_anchor, deadline_dt, score in movable_tasks:
-        task_duration = timedelta(minutes=duration_m)
-        placed = False
-
-        # Match preference profile if provided
-        profile = None
-        if profiles:
-            profile = profiles.get(task.title)
+    for t in movable_tasks:
+        task_duration = timedelta(minutes=t.duration)
+        profile = profiles.get(t.task.title) if profiles else None
 
         candidates = []
         for i, slot in enumerate(working_slots):
-            if slot.duration_minutes < duration_m:
+            if slot.duration_minutes < t.duration:
                 continue
-
-            possible_starts = [slot.start]
-
-            # Preferred anchor time if it fits inside this slot
-            if preferred_anchor and slot.start <= preferred_anchor:
-                anchor_end = preferred_anchor + task_duration
-                if anchor_end <= slot.end:
-                    possible_starts.append(preferred_anchor)
-
-            # Hour boundaries if profile has non-zero weights
-            if profile and any(w > 0.0 for w in profile.hourly_weights):
-                curr = slot.start.replace(minute=0, second=0, microsecond=0)
-                if curr < slot.start:
-                    curr += timedelta(hours=1)
-                while curr + task_duration <= slot.end:
-                    if curr >= slot.start:
-                        possible_starts.append(curr)
-                    curr += timedelta(hours=1)
-
-            # Deduplicate possible starts
-            seen_starts = set()
-            unique_starts = []
-            for st in possible_starts:
-                if st not in seen_starts:
-                    seen_starts.add(st)
-                    unique_starts.append(st)
-
-            for cand_start in unique_starts:
+            for cand_start in _candidate_starts(slot, task_duration, t.start_anchor, profile):
                 cand_end = cand_start + task_duration
-                if deadline_dt and cand_end > deadline_dt:
+                if (t.deadline and cand_end > t.deadline) or cand_end > slot.end:
                     continue
-                if cand_end > slot.end:
-                    continue
-
-                # Willingness weight for this hour
-                h = cand_start.hour
-                raw_w = profile.get_weight(h) if profile else 0.0
-                willingness = raw_w if raw_w > 0.0 else 0.5
-
-                # Proximity to preferred anchor
-                proximity = 1.0
-                if preferred_anchor:
-                    hours_diff = abs((cand_start - preferred_anchor).total_seconds()) / 3600.0
-                    proximity = max(0.1, 1.0 - 0.05 * hours_diff)
-
-                # Quality score with slight chronological tie-breaker
-                time_offset_hrs = (cand_start - ref_start).total_seconds() / 3600.0 if ref_start else 0.0
-                tie_breaker = 1e-4 / (1.0 + max(0.0, time_offset_hrs))
-                quality = (willingness * proximity) + tie_breaker
-
-                candidates.append((quality, i, cand_start, cand_end))
+                q = _score_candidate(cand_start, t.start_anchor, profile, ref_start)
+                candidates.append((q, i, cand_start, cand_end))
 
         if candidates:
-            # Sort by quality score descending
             candidates.sort(key=lambda c: c[0], reverse=True)
-            best_quality, slot_idx, best_start, best_end = candidates[0]
+            _, slot_idx, best_start, best_end = candidates[0]
 
-            placed_tasks.append(
-                PlacedTask(
-                    task=task,
-                    start=best_start,
-                    end=best_end,
-                    priority_score=score,
-                )
-            )
-
-            # Carve slot into prefix and suffix around placed task
+            placed_tasks.append(PlacedTask(task=t.task, start=best_start, end=best_end, priority_score=t.score))
             orig_slot = working_slots.pop(slot_idx)
-            new_fragments = []
-
-            prefix_end = best_start
-            prefix_mins = int((prefix_end - orig_slot.start).total_seconds() // 60)
-            if prefix_mins >= min_slot_duration:
-                new_fragments.append(
-                    TimeSlot(start=orig_slot.start, end=prefix_end, duration_minutes=prefix_mins)
-                )
-
-            suffix_start = best_end + buffer_delta
-            if suffix_start < orig_slot.end:
-                suffix_mins = int((orig_slot.end - suffix_start).total_seconds() // 60)
-                if suffix_mins >= min_slot_duration:
-                    new_fragments.append(
-                        TimeSlot(start=suffix_start, end=orig_slot.end, duration_minutes=suffix_mins)
-                    )
-
-            working_slots.extend(new_fragments)
+            working_slots.extend(_carve_slot(orig_slot, best_start, best_end, buffer_delta, min_slot_duration))
             working_slots.sort(key=lambda s: s.start)
-            placed = True
-
-        if not placed:
+        else:
             reason = "No available free slot with sufficient duration"
-            if deadline_dt:
-                could_fit_without_deadline = any(
-                    s.duration_minutes >= duration_m for s in working_slots
-                )
-                all_slots_after_deadline = bool(working_slots) and all(
-                    s.start >= deadline_dt for s in working_slots
-                )
-                if could_fit_without_deadline or all_slots_after_deadline:
-                    reason = f"Cannot schedule before deadline {deadline_dt.strftime('%Y-%m-%d %H:%M')}"
-            unplaced_tasks.append(
-                UnplacedTask(
-                    task=task,
-                    reason=reason,
-                    priority_score=score,
-                )
-            )
+            if t.deadline:
+                could_fit = any(s.duration_minutes >= t.duration for s in working_slots)
+                all_after = bool(working_slots) and all(s.start >= t.deadline for s in working_slots)
+                if could_fit or all_after:
+                    reason = f"Cannot schedule before deadline {t.deadline.strftime('%Y-%m-%d %H:%M')}"
+            unplaced_tasks.append(UnplacedTask(task=t.task, reason=reason, priority_score=t.score))
 
-    # Sort placed tasks chronologically for clean presentation
     placed_tasks.sort(key=lambda p: p.start)
-
     return SchedulePlan(
         placed_tasks=placed_tasks,
         unplaced_tasks=unplaced_tasks,
