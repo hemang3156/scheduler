@@ -23,9 +23,9 @@ PROMPT_PATH = PROJECT_ROOT / "redundant" / "prompt.md"
 DEFAULT_RESPONSE_PATH = PROJECT_ROOT / "redundant" / "export" / "response.json"
 TIMEZONE = "Asia/Kolkata"
 DEFAULT_MODELS = (
-    "gemini-3.8-flash",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
     "gemini-3.1-flash-lite",
     "gemini-3.7-flash",
 )
