@@ -1,0 +1,31 @@
+{
+  "profile_name": "ask_sir_for_sp2_help",
+  "updated_count": 1,
+  "hourly_weights": [
+    0.0184,
+    0.0042,
+    0.0026,
+    0.0026,
+    0.0026,
+    0.0026,
+    0.0026,
+    0.0032,
+    0.1179,
+    0.2968,
+    0.4397,
+    0.3944,
+    0.3226,
+    0.5491,
+    0.85,
+    0.7453,
+    0.7567,
+    0.6815,
+    0.5786,
+    0.5601,
+    0.4914,
+    0.2539,
+    0.0253,
+    0.0379
+  ],
+  "description": "Boosted the 14:00 hour weight to 0.85 to accommodate the scheduled meeting while preserving daytime operational baselines."
+}

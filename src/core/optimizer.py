@@ -1,3 +1,4 @@
+import datetime as dt
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 from zoneinfo import ZoneInfo
@@ -93,10 +94,21 @@ def optimize_schedule(
 
     for task in tasks:
         dur, movable, start_dt, deadline_dt, score = get_task_attrs(task)
-        if not movable and start_dt is not None:
+        is_all_day_anchor = (start_dt is not None and start_dt.time() == dt.time(0, 0))
+
+        if not movable and start_dt is not None and not is_all_day_anchor:
             fixed_tasks.append((task, dur, start_dt, score))
         else:
-            movable_tasks.append((task, dur, start_dt, deadline_dt, score))
+            if is_all_day_anchor:
+                min_start = start_dt
+                pref_anchor = None
+                if deadline_dt is None or deadline_dt.time() != dt.time(23, 59, 59):
+                    deadline_dt = datetime.combine(start_dt.date(), dt.time(23, 59, 59), tzinfo=ref_tz)
+            else:
+                min_start = None
+                pref_anchor = start_dt
+
+            movable_tasks.append((task, dur, pref_anchor, deadline_dt, score, min_start))
 
     buffer_delta = timedelta(minutes=task_buffer_minutes)
 
@@ -165,8 +177,8 @@ def optimize_schedule(
     # Step 2: Sort Movable Tasks by Priority & Deadlines
     # -----------------------------------------------------------------------
     def task_sort_key(item):
-        # item: (task, duration_m, preferred_anchor, deadline_dt, score)
-        task, duration_m, preferred_anchor, deadline_dt, score = item
+        # item: (task, duration_m, preferred_anchor, deadline_dt, score, min_start)
+        task, duration_m, preferred_anchor, deadline_dt, score, min_start = item
         # 1. Higher score first (-score)
         # 2. Earlier deadline first (or distant future if None)
         deadline_timestamp = deadline_dt.timestamp() if deadline_dt else float("inf")
@@ -178,7 +190,7 @@ def optimize_schedule(
     # -----------------------------------------------------------------------
     # Step 3: Gradient-Aware Slot Allocation
     # -----------------------------------------------------------------------
-    for task, duration_m, preferred_anchor, deadline_dt, score in movable_tasks:
+    for task, duration_m, preferred_anchor, deadline_dt, score, min_start in movable_tasks:
         task_duration = timedelta(minutes=duration_m)
         placed = False
 
@@ -220,6 +232,8 @@ def optimize_schedule(
 
             for cand_start in unique_starts:
                 cand_end = cand_start + task_duration
+                if min_start and cand_start < min_start:
+                    continue
                 if deadline_dt and cand_end > deadline_dt:
                     continue
                 if cand_end > slot.end:

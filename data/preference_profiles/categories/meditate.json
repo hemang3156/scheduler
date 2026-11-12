@@ -1,0 +1,31 @@
+{
+  "profile_name": "meditate",
+  "updated_count": 1,
+  "hourly_weights": [
+    0.02,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.02,
+    0.95,
+    0.35,
+    0.4,
+    0.38,
+    0.35,
+    0.45,
+    0.5,
+    0.55,
+    0.6,
+    0.55,
+    0.5,
+    0.45,
+    0.4,
+    0.3,
+    0.1,
+    0.05
+  ],
+  "description": "Morning meditation preference centered around 08:30 AM."
+}

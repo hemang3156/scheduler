@@ -1,0 +1,31 @@
+{
+  "profile_name": "prepare_for_ml_viva_session_1",
+  "updated_count": 1,
+  "hourly_weights": [
+    0.0184,
+    0.0042,
+    0.0026,
+    0.0026,
+    0.0026,
+    0.0026,
+    0.0026,
+    0.0032,
+    0.1179,
+    0.2968,
+    0.4397,
+    0.3944,
+    0.3226,
+    0.5491,
+    0.7054,
+    0.85,
+    0.9,
+    0.6815,
+    0.5786,
+    0.5601,
+    0.4914,
+    0.2539,
+    0.0253,
+    0.0379
+  ],
+  "description": "Boosted preference weights for hours 15:00 and 16:00 to establish a baseline for the ML viva preparation session while maintaining a smooth daytime distribution."
+}

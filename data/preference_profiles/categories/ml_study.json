@@ -1,0 +1,31 @@
+{
+  "profile_name": "ml_study",
+  "updated_count": 1,
+  "hourly_weights": [
+    0.02,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.02,
+    0.15,
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.25,
+    0.5,
+    0.45,
+    0.95,
+    0.95,
+    0.9,
+    0.05
+  ],
+  "description": "Post-dinner evening study blocks for Machine Learning (20:00 - 23:00)."
+}

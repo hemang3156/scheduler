@@ -162,18 +162,23 @@ def interactive_mode(now: dt.datetime | None = None):
         start_hour, end_hour = 9, 21
     else:
         start_str = _ask("Daily start hour (0-23, e.g. 9 for 9 AM)", "9")
-        end_str = _ask("Daily end hour (0-23, e.g. 21 for 9 PM)", "21")
+        end_str = _ask("Daily end hour (0-23, e.g. 1 for 1 AM, 21 for 9 PM)", "21")
         try:
             start_hour = int(start_str)
             end_hour = int(end_str)
-            if not (0 <= start_hour < 24 and 0 <= end_hour <= 24 and start_hour < end_hour):
+            if not (0 <= start_hour < 24 and 0 <= end_hour < 24 and start_hour != end_hour):
                 raise ValueError()
         except ValueError:
             print(f"{RED}Invalid hours. Using defaults (09:00 – 21:00).{RESET}")
             start_hour, end_hour = 9, 21
 
-    start_window = dt.datetime.combine(initial_date, dt.time(start_hour, 0), tzinfo=tz)
-    end_window = dt.datetime.combine(final_date, dt.time(end_hour, 0), tzinfo=tz)
+    daily_start = dt.time(start_hour, 0)
+    daily_end = dt.time(end_hour, 0)
+    start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
+    if daily_end <= daily_start:
+        end_window = dt.datetime.combine(final_date + dt.timedelta(days=1), daily_end, tzinfo=tz)
+    else:
+        end_window = dt.datetime.combine(final_date, daily_end, tzinfo=tz)
 
     if initial_date == now.date() and start_window < now:
         start_window = now
@@ -183,9 +188,11 @@ def interactive_mode(now: dt.datetime | None = None):
             f"Start window ({start_window.strftime('%I:%M %p')}) is at or after end window ({end_window.strftime('%I:%M %p')}).",
             "Today's daily window has ended. Choose tomorrow or a future date range.",
         )
-    elif initial_date < final_date and now >= dt.datetime.combine(initial_date, dt.time(end_hour, 0), tzinfo=tz):
-        initial_date = initial_date + dt.timedelta(days=1)
-        start_window = dt.datetime.combine(initial_date, dt.time(start_hour, 0), tzinfo=tz)
+    elif initial_date < final_date:
+        cutoff_first_day = dt.datetime.combine(initial_date + (dt.timedelta(days=1) if daily_end <= daily_start else dt.timedelta(0)), daily_end, tzinfo=tz)
+        if now >= cutoff_first_day:
+            initial_date = initial_date + dt.timedelta(days=1)
+            start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
 
     # ── Step 3: Collect tasks ────────────────────────────────────────
     notes_text = _ask_multiline(
@@ -354,7 +361,7 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--end-hour",
         type=int,
         default=None,
-        help="Daily ending hour in 24-hour format (default: 21 for 21:00).",
+        help="Daily ending hour in 24-hour format (default: 1 for 01:00 AM next day).",
     )
     parser.add_argument(
         "--buffer",
@@ -474,7 +481,7 @@ def main(argv=None, now: dt.datetime | None = None):
     else:
         continuous_window = False
         start_hour = args.start_hour if args.start_hour is not None else 9
-        end_hour = args.end_hour if args.end_hour is not None else 21
+        end_hour = args.end_hour if args.end_hour is not None else 1
         daily_start = dt.time(start_hour, 0)
         daily_end = dt.time(end_hour, 0)
 
@@ -483,7 +490,10 @@ def main(argv=None, now: dt.datetime | None = None):
             end_window = now + dt.timedelta(hours=24)
         else:
             start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
-            end_window = dt.datetime.combine(final_date, daily_end, tzinfo=tz)
+            if daily_end <= daily_start:
+                end_window = dt.datetime.combine(final_date + dt.timedelta(days=1), daily_end, tzinfo=tz)
+            else:
+                end_window = dt.datetime.combine(final_date, daily_end, tzinfo=tz)
 
             if initial_date == now.date() and start_window < now:
                 start_window = now
@@ -493,9 +503,11 @@ def main(argv=None, now: dt.datetime | None = None):
                     f"Start window ({start_window.strftime('%Y-%m-%d %I:%M %p')}) is at or after end window ({end_window.strftime('%I:%M %p')}).",
                     "Today's scheduling window has ended. Use --tomorrow to schedule for tomorrow, or specify a later --end-hour.",
                 )
-            elif initial_date < final_date and now >= dt.datetime.combine(initial_date, daily_end, tzinfo=tz):
-                initial_date = initial_date + dt.timedelta(days=1)
-                start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
+            elif initial_date < final_date:
+                cutoff_first_day = dt.datetime.combine(initial_date + (dt.timedelta(days=1) if daily_end <= daily_start else dt.timedelta(0)), daily_end, tzinfo=tz)
+                if now >= cutoff_first_day:
+                    initial_date = initial_date + dt.timedelta(days=1)
+                    start_window = dt.datetime.combine(initial_date, daily_start, tzinfo=tz)
 
     print("\n" + "=" * 80)
     print("      AUTONOMOUS CALENDAR SCHEDULER — INITIALIZING ENGINE")
@@ -563,14 +575,17 @@ def main(argv=None, now: dt.datetime | None = None):
                 tf_start, tf_end = time_finder(tasks, now=now, tz_name=TIMEZONE)
                 if tf_end.date() > initial_date:
                     start_window = tf_start
-                    end_window = tf_end
                     initial_date = start_window.date()
-                    final_date = end_window.date()
+                    final_date = tf_end.date()
                     continuous_window = False
                     start_h = args.start_hour if args.start_hour is not None else 9
-                    end_h = args.end_hour if args.end_hour is not None else 21
+                    end_h = args.end_hour if args.end_hour is not None else 1
                     daily_start = dt.time(start_h, 0)
                     daily_end = dt.time(end_h, 0)
+                    if daily_end <= daily_start:
+                        end_window = dt.datetime.combine(final_date + dt.timedelta(days=1), daily_end, tzinfo=tz)
+                    else:
+                        end_window = dt.datetime.combine(final_date, daily_end, tzinfo=tz)
                     days_count = (final_date - initial_date).days + 1
                     print(f" -> Auto-detected scheduling window from tasks via time_finder:")
                     print(f"    Horizon: {start_window.strftime('%Y-%m-%d %I:%M %p')} -> {end_window.strftime('%Y-%m-%d %I:%M %p')} ({days_count} days)")

@@ -20,7 +20,7 @@ Instructions:
    - "title": Clean, concise title.
    - "event_type": One of "lecture", "meeting", "routine", "evaluative", "others".
    - "start": An explicit ISO local datetime (YYYY-MM-DDTHH:MM:SS) if specifically scheduled, otherwise null. If a quiz, exam, presentation, or similar super important milestone is in the task list with only a date and no specific time, set "start" to that date at 00:00:00 (YYYY-MM-DDT00:00:00).
-   - "end": An explicit ISO local deadline or end datetime (YYYY-MM-DDTHH:MM:SS) ONLY if an explicit deadline or end time was stated with keywords like 'by', 'before', 'until', 'to'. If only a start or preferred time is mentioned (e.g. '10am'), set "end" to null. If a quiz, exam, presentation, or similar super important milestone is in the task list with only a date and no specific time, set "end" to that date at 23:59:59 (YYYY-MM-DDT23:59:59).
+   - "end": An explicit ISO local deadline or end datetime (YYYY-MM-DDTHH:MM:SS) ONLY if an explicit deadline or end time was stated with keywords like 'by', 'before', 'until', 'to'. If only a start or preferred time is mentioned (e.g. '10am'), set "end" to null. If a quiz, exam, presentation, or similar super important milestone is in the task list with only a date and no specific time, set "end" to that date at 23:59:59 (YYYY-MM-DDT23:59:59). NEVER set an 'end' earlier than Current Time ({current_time}).
    - "estimated_duration": Realistic duration in minutes (positive integer, minimum 15 minutes unless trivial). Default self-study sessions to 45-60 minutes unless stated otherwise. Quick checks/reminders to 15-30 minutes.
    - "importance": Integer from 1 (trivial) to 5 (critical deliverable/health/high-stakes).
    - "urgency": Integer from 1 (flexible/someday) to 5 (due today/ASAP).
@@ -28,9 +28,18 @@ Instructions:
    - "priority_category": "urgent", "important", "routine", or "low_priority".
    - "scoring_rationale": One concise sentence explaining the scores.
 3. Priority Processing & Time Windows:
+   - Preparation vs Milestones:
+     - Distinguish between future milestones (e.g. 'quiz-25th', 'krd quiz -20th', 'lab skill test - 19th') and preparation tasks (e.g. 'pdp quiz prep', 'krd quiz prep', 'study for exam').
+     - Unless a prep task explicitly specifies a future date in its text, preparation tasks are for TODAY ({current_date}).
+   - Scheduling Window for Today's Tasks:
+     - Today's tasks (self-study, prep, project work, routine items) are to be scheduled between Current Time ({current_time}) and the end of today's operating window (1:00 AM tonight, {next_date}T01:00:00).
+     - Unless an explicit 'by/before' deadline is written by the user, set 'end' to null so they can be placed flexibly throughout the evening up until 1:00 AM.
+   - Strict Negative Constraint Against Past Deadlines:
+     - NEVER set an 'end' (deadline) earlier than Current Time ({current_time}). Deadlines before Current Time are expired and invalid.
+     - Do NOT invent or hallucinate arbitrary afternoon or early evening deadlines (e.g., 15:00, 17:00, 19:00) that artificially constrain flexible tasks.
    - High-Priority Task Protection:
      - Critical academic deliverables, vivas, exams, graded evaluations, and high-stakes meetings with professors or evaluators must be scored with high importance (4-5) and urgency (4-5), and priority_category="urgent".
-     - If a quiz, exam, presentation, viva, or similar super important task/milestone is present in the task list with only a date and no specific time, put the event's start and end times as 00:00:00 and 23:59:59 on that date (start: "YYYY-MM-DDT00:00:00", end: "YYYY-MM-DDT23:59:59").
+     - If a quiz, exam, presentation, viva, or similar super important task/milestone is present in the task list with only a date and no specific time, put the event's start and end times as 00:00:00 and 23:59:59 on that date (start: "YYYY-MM-DDT00:00:00", end: "YYYY-MM-DDT23:59:59") and mark is_movable=True.
      - General project assistance, casual study, or non-urgent queries should be scored lower (importance 2-3, urgency 2-3).
      - High priority tasks must be processed first so lower priority or routine tasks do not take up their space or block them.
    - Time Windows vs Fixed Appointments:
@@ -97,7 +106,8 @@ Your task is to evaluate, calibrate, and augment each item with operational sche
 
 8. **High-Priority Task Protection & All-Day Milestones**:
    - High-priority tasks (academic evaluations, vivas, exams, presentations, critical deliverables) must be scored with high importance (4-5) and urgency (4-5) and prioritized so that lower-priority tasks (general help, casual study, routine chores) never take up their slot or window.
-   - If a quiz, exam, presentation, viva, or similar super important task/milestone is present in the task list with only a date and no specific time, set its "start" datetime anchor to 00:00:00 (YYYY-MM-DDT00:00:00) and its "end" datetime anchor to 23:59:59 (YYYY-MM-DDT23:59:59).
+   - If a quiz, exam, presentation, viva, or similar super important task/milestone is present in the task list with only a date and no specific time, set its "start" datetime anchor to 00:00:00 (YYYY-MM-DDT00:00:00) and its "end" datetime anchor to 23:59:59 (YYYY-MM-DDT23:59:59) and mark is_movable=true so it can be scheduled within daytime operating hours on that date.
+   - Unless an explicit future date is attached, preparation tasks (e.g. 'quiz prep', 'study session') are meant for today. Never assign deadlines in the past.
 
 ### Input Data
 {response_json}

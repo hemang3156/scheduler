@@ -1,0 +1,31 @@
+{
+  "profile_name": "krd_ques_practice_study_break_1",
+  "updated_count": 1,
+  "hourly_weights": [
+    0.02,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.01,
+    0.02,
+    0.15,
+    0.35,
+    0.4,
+    0.38,
+    0.35,
+    0.4,
+    0.5,
+    0.55,
+    0.6,
+    0.55,
+    0.95,
+    0.9,
+    0.4,
+    0.3,
+    0.1,
+    0.05
+  ],
+  "description": "Evening problem practice following lab (18:00 - 20:00)."
+}

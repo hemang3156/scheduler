@@ -23,13 +23,11 @@ PROMPT_PATH = PROJECT_ROOT / "redundant" / "prompt.md"
 DEFAULT_RESPONSE_PATH = PROJECT_ROOT / "redundant" / "export" / "response.json"
 TIMEZONE = "Asia/Kolkata"
 DEFAULT_MODELS = (
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
     "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
     "gemini-3.7-flash",
-    "gemini-3.8-flash",
 )
 
 
@@ -77,14 +75,14 @@ def _call_gemini_with_fallback(
                 if response.parsed:
                     return response.parsed
                 raise ValueError(f"Empty structured response received from model {model_name}")
-            except ServerError as e:
-                last_error = e
-                # Transient 503 high-demand spike: short backoff before attempting next retry/model
-                time.sleep(1.0 * attempt)
             except ClientError as e:
                 # If model is retired or not available (404), break immediately to next model
                 last_error = e
                 break
+            except Exception as e:
+                last_error = e
+                # Transient 503 high-demand spike or network disconnect: short backoff before next attempt
+                time.sleep(1.0 * attempt)
 
     if last_error:
         raise last_error

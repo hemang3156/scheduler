@@ -179,13 +179,15 @@ def _call_llm_time_finder(
                 if response.parsed:
                     return response.parsed
                 raise ValueError(f"Empty structured response received from model {model_name}")
-            except ServerError as e:
-                last_error = e
-                logger.warning("Transient ServerError on model %s attempt %d: %s", model_name, attempt, e)
             except ClientError as e:
                 last_error = e
                 logger.warning("ClientError on model %s: %s", model_name, e)
                 break
+            except Exception as e:
+                last_error = e
+                logger.warning("Transient error on model %s attempt %d: %s", model_name, attempt, e)
+                import time
+                time.sleep(1.0 * attempt)
 
     if last_error:
         raise last_error
