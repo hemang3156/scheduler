@@ -5,7 +5,7 @@
 [![Google Calendar API](https://img.shields.io/badge/Integration-Google%20Calendar%20API-34A853?style=flat-square&logo=google-calendar&logoColor=white)](https://developers.google.com/calendar)
 [![OAuth 2.0](https://img.shields.io/badge/Auth-OAuth%202.0-orange?style=flat-square)](https://oauth.net/2/)
 [![uv](https://img.shields.io/badge/Packaging-uv-blueviolet?style=flat-square)](https://github.com/astral-sh/uv)
-[![pytest](https://img.shields.io/badge/Tests-47%20Passed-brightgreen?style=flat-square&logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![pytest](https://img.shields.io/badge/Tests-71%20Passed-brightgreen?style=flat-square&logo=pytest&logoColor=white)](https://docs.pytest.org/)
 
 An autonomous personal executive assistant built on AI Engineering principles ([roadmap.sh/ai-engineer](https://roadmap.sh/ai-engineer)). The system ingests informal, unstructured natural language notes, parses them into schema-validated task drafts, resolves scheduling conflicts around immutable calendar blocks using deterministic gap-finding, optimizes slot placement via a continuous 24-hour willingness gradient, evolves user preferences dynamically via LLM feedback, and renders an interactive schedule diff before committing changes to Google Calendar.
 
@@ -160,7 +160,7 @@ pip install -r requirements.txt
 2. Enable the **Google Calendar API**.
 3. Configure the **OAuth Consent Screen** (add scopes: `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/calendar.readonly`).
 4. Create **OAuth 2.0 Client IDs** (Application type: *Desktop application*).
-5. Download the credentials JSON file and save it in the repository root as `credentials.json`.
+5. Download the credentials JSON file and save it in the repository root as `credentials.json` (see `credentials.json.example` for reference).
 6. On first execution, the client prompts your browser for one-time OAuth consent and caches the credentials in `token.json` with automatic token refresh.
 
 #### Step 3: Configure Gemini API Key
@@ -168,8 +168,9 @@ Provide your Gemini API key through either:
 ```bash
 # Option A: Plaintext file in project root (easiest)
 echo "your-api-key-here" > gemini_api_key.txt
+# (or copy from gemini_api_key.txt.example)
 
-# Option B: Environment variable
+# Option B: Environment variable (or copy .env.example to .env)
 export GEMINI_API_KEY="your-api-key-here"
 ```
 
