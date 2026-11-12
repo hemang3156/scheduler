@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from src.agent.scorer import score_tasks_from_json, extract_and_score_notes
 from src.agent.scheduler_agent import AutonomousScheduler, format_schedule_diff
 from src.tools.calender_client import CalendarClient
+from src.tools.time_finder import time_finder
 from src.core.exceptions import CalendarAuthError, CalendarError
 
 TIMEZONE = "Asia/Kolkata"
@@ -259,7 +260,7 @@ def interactive_mode(now: dt.datetime | None = None):
     )
 
     # ── Step 6: Show results ─────────────────────────────────────────
-    diff_text = format_schedule_diff(plan)
+    diff_text = format_schedule_diff(plan, existing_events=existing_events)
     print(f"\n{diff_text}")
 
     # ── Step 7: Confirm sync ─────────────────────────────────────────
@@ -555,6 +556,26 @@ def main(argv=None, now: dt.datetime | None = None):
                         "Pass tasks as arguments, use --notes, or write to data/daily_notes.md.\n  Or run 'scheduler --interactive' for a guided walkthrough.",
                     )
         print(f" -> Successfully scored {len(tasks)} tasks.")
+
+        # Dynamically auto-detect scheduling horizon from tasks if no explicit dates were provided
+        if is_default_range and tasks:
+            try:
+                tf_start, tf_end = time_finder(tasks, now=now, tz_name=TIMEZONE)
+                if tf_end.date() > initial_date:
+                    start_window = tf_start
+                    end_window = tf_end
+                    initial_date = start_window.date()
+                    final_date = end_window.date()
+                    continuous_window = False
+                    start_h = args.start_hour if args.start_hour is not None else 9
+                    end_h = args.end_hour if args.end_hour is not None else 21
+                    daily_start = dt.time(start_h, 0)
+                    daily_end = dt.time(end_h, 0)
+                    days_count = (final_date - initial_date).days + 1
+                    print(f" -> Auto-detected scheduling window from tasks via time_finder:")
+                    print(f"    Horizon: {start_window.strftime('%Y-%m-%d %I:%M %p')} -> {end_window.strftime('%Y-%m-%d %I:%M %p')} ({days_count} days)")
+            except Exception:
+                pass
     except SystemExit:
         raise
     except Exception as e:
@@ -596,7 +617,7 @@ def main(argv=None, now: dt.datetime | None = None):
 
     # Step 3: Render Diff
     print("\n[Step 3/3] Optimization complete. Reviewing proposed schedule diff:")
-    diff_text = format_schedule_diff(plan)
+    diff_text = format_schedule_diff(plan, existing_events=existing_events)
     print("\n" + diff_text)
 
     # Step 4: Interactive Confirmation

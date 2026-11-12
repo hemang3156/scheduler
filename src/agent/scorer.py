@@ -23,6 +23,8 @@ PROMPT_PATH = PROJECT_ROOT / "redundant" / "prompt.md"
 DEFAULT_RESPONSE_PATH = PROJECT_ROOT / "redundant" / "export" / "response.json"
 TIMEZONE = "Asia/Kolkata"
 DEFAULT_MODELS = (
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
     "gemini-3.1-flash-lite",
@@ -122,6 +124,15 @@ def sanitize_task_anchors(task: ScoredTask, reference_now: Optional[dt.datetime]
             s = s.replace(tzinfo=ref_tz)
     except (ValueError, TypeError):
         return task
+
+    # Preserve all-day milestone anchors (00:00:00 to 23:59:59)
+    if s.time() == dt.time(0, 0) and task.end and task.end.dateTime:
+        try:
+            e_check = dt.datetime.fromisoformat(task.end.dateTime)
+            if e_check.time() in (dt.time(23, 59, 59), dt.time(23, 59)):
+                return task
+        except (ValueError, TypeError):
+            pass
 
     # If start is in the morning of today, but reference_now is evening, shift to PM if that puts it in the future
     if reference_now and s.date() == reference_now.date() and s < reference_now and s.hour < 12:

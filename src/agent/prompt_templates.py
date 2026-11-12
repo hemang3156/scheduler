@@ -19,17 +19,18 @@ Instructions:
 2. For each task, determine:
    - "title": Clean, concise title.
    - "event_type": One of "lecture", "meeting", "routine", "evaluative", "others".
-   - "start": An explicit ISO local datetime (YYYY-MM-DDTHH:MM) if specifically scheduled, otherwise null.
-   - "end": An explicit ISO local deadline or end datetime (YYYY-MM-DDTHH:MM) ONLY if an explicit deadline or end time was stated with keywords like 'by', 'before', 'until', 'to'. If only a start or preferred time is mentioned (e.g. '10am'), set "end" to null.
+   - "start": An explicit ISO local datetime (YYYY-MM-DDTHH:MM:SS) if specifically scheduled, otherwise null. If a quiz, exam, presentation, or similar super important milestone is in the task list with only a date and no specific time, set "start" to that date at 00:00:00 (YYYY-MM-DDT00:00:00).
+   - "end": An explicit ISO local deadline or end datetime (YYYY-MM-DDTHH:MM:SS) ONLY if an explicit deadline or end time was stated with keywords like 'by', 'before', 'until', 'to'. If only a start or preferred time is mentioned (e.g. '10am'), set "end" to null. If a quiz, exam, presentation, or similar super important milestone is in the task list with only a date and no specific time, set "end" to that date at 23:59:59 (YYYY-MM-DDT23:59:59).
    - "estimated_duration": Realistic duration in minutes (positive integer, minimum 15 minutes unless trivial). Default self-study sessions to 45-60 minutes unless stated otherwise. Quick checks/reminders to 15-30 minutes.
    - "importance": Integer from 1 (trivial) to 5 (critical deliverable/health/high-stakes).
    - "urgency": Integer from 1 (flexible/someday) to 5 (due today/ASAP).
-   - "is_movable": False for fixed meetings or scheduled classes with others; True for solo work, practice, chores.
+   - "is_movable": False for fixed meetings or scheduled classes with others; True for solo work, practice, chores. If an important quiz, exam, or presentation has only a date and no fixed start hour, mark is_movable=True so it can be scheduled within the day.
    - "priority_category": "urgent", "important", "routine", or "low_priority".
    - "scoring_rationale": One concise sentence explaining the scores.
 3. Priority Processing & Time Windows:
    - High-Priority Task Protection:
      - Critical academic deliverables, vivas, exams, graded evaluations, and high-stakes meetings with professors or evaluators must be scored with high importance (4-5) and urgency (4-5), and priority_category="urgent".
+     - If a quiz, exam, presentation, viva, or similar super important task/milestone is present in the task list with only a date and no specific time, put the event's start and end times as 00:00:00 and 23:59:59 on that date (start: "YYYY-MM-DDT00:00:00", end: "YYYY-MM-DDT23:59:59").
      - General project assistance, casual study, or non-urgent queries should be scored lower (importance 2-3, urgency 2-3).
      - High priority tasks must be processed first so lower priority or routine tasks do not take up their space or block them.
    - Time Windows vs Fixed Appointments:
@@ -94,8 +95,9 @@ Your task is to evaluate, calibrate, and augment each item with operational sche
    - Do not greedily follow preference weights.
    - Do not recommend or anchor events in slots too low in preference weights unless there is no alternative choice.
 
-8. **High-Priority Task Protection**:
-   - High-priority tasks (academic evaluations, vivas, exams, critical deliverables) must be scored with high importance (4-5) and urgency (4-5) and prioritized so that lower-priority tasks (general help, casual study, routine chores) never take up their slot or window.
+8. **High-Priority Task Protection & All-Day Milestones**:
+   - High-priority tasks (academic evaluations, vivas, exams, presentations, critical deliverables) must be scored with high importance (4-5) and urgency (4-5) and prioritized so that lower-priority tasks (general help, casual study, routine chores) never take up their slot or window.
+   - If a quiz, exam, presentation, viva, or similar super important task/milestone is present in the task list with only a date and no specific time, set its "start" datetime anchor to 00:00:00 (YYYY-MM-DDT00:00:00) and its "end" datetime anchor to 23:59:59 (YYYY-MM-DDT23:59:59).
 
 ### Input Data
 {response_json}
@@ -197,3 +199,46 @@ def build_curve_evolution_prompt(
         .replace("{current_weights_json}", current_weights_json)
         .replace("{updated_count}", str(updated_count))
     )
+
+
+TIME_FINDER_PROMPT_TEMPLATE = """You are an intelligent scheduling horizon analyzer for an autonomous calendar system.
+
+### Context & Anchors
+- Current Reference Datetime (tz.now): {current_datetime}
+- Current Date: {current_date}
+- Current Timezone: {timezone}
+
+### Input Structured Notes / Tasks JSON
+\"\"\"
+{structured_notes_json}
+\"\"\"
+
+### Instructions
+1. Analyze all tasks, events, and milestones in the input structured notes JSON.
+2. Identify all calendar dates mentioned either explicitly in start/end anchors (e.g., "dateTime": "YYYY-MM-DDTHH:MM" or "00:00:00"/"23:59:59"), or embedded in task titles/descriptions (such as "17th oct", "sp2 quiz on 23rd oct", "tomorrow", etc.). Note that quizzes, exams, or presentations with only dates may have start 00:00:00 and end 23:59:59.
+3. Determine:
+   - "start_datetime": The scheduling start boundary in ISO 8601 format with timezone offset. Usually this is current reference datetime ({current_datetime}) so scheduling begins from now.
+   - "end_datetime": Find the latest date among all tasks/events in the notes. Set "end_datetime" strictly to that latest date's End of Day (EOD) at 23:59:59 in the active timezone (for example: if notes mention an event on 17th oct and another event on 23rd oct, the latest date is 23rd oct, so end_datetime is 23rd oct at 23:59:59, e.g. YYYY-10-23T23:59:59+05:30).
+   - If no future date beyond today is mentioned, or notes only contain tasks for today, set "end_datetime" to today's End of Day ({current_date}T23:59:59+05:30).
+   - "latest_event_title": Title or description of the latest task/event that determined the horizon end date.
+   - "reasoning": Concise explanation of the identified dates.
+
+Ensure the output conforms strictly to the TimeHorizonOutput JSON schema.
+"""
+
+
+def build_time_finder_prompt(
+    structured_notes_json: str,
+    current_datetime: str,
+    current_date: str,
+    timezone: str,
+) -> str:
+    """Builds time finder prompt avoiding str.format brace clashes."""
+    return (
+        TIME_FINDER_PROMPT_TEMPLATE
+        .replace("{current_datetime}", current_datetime)
+        .replace("{current_date}", current_date)
+        .replace("{timezone}", timezone)
+        .replace("{structured_notes_json}", structured_notes_json)
+    )
+
