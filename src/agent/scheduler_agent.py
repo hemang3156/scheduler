@@ -26,7 +26,11 @@ logger = logging.getLogger(__name__)
 TIMEZONE = "Asia/Kolkata"
 
 
-def format_schedule_diff(plan: SchedulePlan, use_12hr: bool = True) -> str:
+def format_schedule_diff(
+    plan: SchedulePlan,
+    use_12hr: bool = True,
+    existing_events: Optional[List[CalendarEvent]] = None,
+) -> str:
     """
     Renders a clear, deterministic ASCII diff table of the proposed schedule.
     Follows human-in-the-loop safety principles.
@@ -36,30 +40,79 @@ def format_schedule_diff(plan: SchedulePlan, use_12hr: bool = True) -> str:
     lines.append("                        PROPOSED SCHEDULE PLAN")
     lines.append("=" * 80)
 
-    # 1. Placed Tasks
-    lines.append("\n[ PLACED TASKS ]")
-    if not plan.placed_tasks:
-        lines.append("  (No tasks could be placed)")
-    else:
-        if use_12hr:
-            header = f"  {'Start':<21} {'End':<11} {'Dur':<6} {'Score':<6} {'Task Title'}"
-        else:
-            header = f"  {'Start':<16} {'End':<16} {'Dur':<6} {'Score':<6} {'Task Title'}"
-        lines.append(header)
-        lines.append("  " + "-" * 76)
+    # 1. Schedule Plan (Unified timeline when calendar events exist, or placed tasks)
+    events_to_show = existing_events if existing_events is not None else getattr(plan, "existing_events", [])
+    if events_to_show:
+        lines.append("\n[ SCHEDULE PLAN (CALENDAR & PLACED TASKS) ]")
+        timeline = []
+        for ev in events_to_show:
+            duration_m = max(0, int((ev.end - ev.start).total_seconds() // 60))
+            timeline.append({
+                "start": ev.start,
+                "end": ev.end,
+                "duration": duration_m,
+                "type": "Calendar",
+                "score": "--",
+                "title": ev.summary,
+            })
         for p in plan.placed_tasks:
+            timeline.append({
+                "start": p.start,
+                "end": p.end,
+                "duration": dur(p),
+                "type": "Placed",
+                "score": f"{p.priority_score:.2f}",
+                "title": p.task.title,
+            })
+        timeline.sort(key=lambda item: (item["start"], 0 if item["type"] == "Calendar" else 1))
+
+        if not timeline:
+            lines.append("  (No tasks or calendar events in this window)")
+        else:
             if use_12hr:
-                s_str = p.start.strftime("%Y-%m-%d %I:%M %p")
-                e_str = p.end.strftime("%I:%M %p")
-                lines.append(
-                    f"  {s_str:<21} {e_str:<11} {f'{dur(p)}m':<6} {p.priority_score:<6.2f} {p.task.title}"
-                )
+                header = f"  {'Start':<21} {'End':<11} {'Dur':<6} {'Type':<10} {'Score':<7} {'Title'}"
             else:
-                s_str = p.start.strftime("%Y-%m-%d %H:%M")
-                e_str = p.end.strftime("%H:%M")
-                lines.append(
-                    f"  {s_str:<16} {e_str:<16} {f'{dur(p)}m':<6} {p.priority_score:<6.2f} {p.task.title}"
-                )
+                header = f"  {'Start':<16} {'End':<16} {'Dur':<6} {'Type':<10} {'Score':<7} {'Title'}"
+            lines.append(header)
+            lines.append("  " + "-" * 76)
+            for item in timeline:
+                dur_str = f"{item['duration']}m"
+                if use_12hr:
+                    s_str = item["start"].strftime("%Y-%m-%d %I:%M %p")
+                    e_str = item["end"].strftime("%I:%M %p")
+                    lines.append(
+                        f"  {s_str:<21} {e_str:<11} {dur_str:<6} {item['type']:<10} {item['score']:<7} {item['title']}"
+                    )
+                else:
+                    s_str = item["start"].strftime("%Y-%m-%d %H:%M")
+                    e_str = item["end"].strftime("%H:%M")
+                    lines.append(
+                        f"  {s_str:<16} {e_str:<16} {dur_str:<6} {item['type']:<10} {item['score']:<7} {item['title']}"
+                    )
+    else:
+        lines.append("\n[ PLACED TASKS ]")
+        if not plan.placed_tasks:
+            lines.append("  (No tasks could be placed)")
+        else:
+            if use_12hr:
+                header = f"  {'Start':<21} {'End':<11} {'Dur':<6} {'Score':<6} {'Task Title'}"
+            else:
+                header = f"  {'Start':<16} {'End':<16} {'Dur':<6} {'Score':<6} {'Task Title'}"
+            lines.append(header)
+            lines.append("  " + "-" * 76)
+            for p in plan.placed_tasks:
+                if use_12hr:
+                    s_str = p.start.strftime("%Y-%m-%d %I:%M %p")
+                    e_str = p.end.strftime("%I:%M %p")
+                    lines.append(
+                        f"  {s_str:<21} {e_str:<11} {f'{dur(p)}m':<6} {p.priority_score:<6.2f} {p.task.title}"
+                    )
+                else:
+                    s_str = p.start.strftime("%Y-%m-%d %H:%M")
+                    e_str = p.end.strftime("%H:%M")
+                    lines.append(
+                        f"  {s_str:<16} {e_str:<16} {f'{dur(p)}m':<6} {p.priority_score:<6.2f} {p.task.title}"
+                    )
 
     # 2. Unplaced Tasks
     lines.append("\n[ UNPLACED TASKS ]")
@@ -243,6 +296,7 @@ class AutonomousScheduler:
             profiles=resolved_profiles,
         )
 
+        plan.existing_events = list(existing_events or [])
         return plan
 
     def apply_plan(

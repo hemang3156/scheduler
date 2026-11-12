@@ -88,6 +88,36 @@ def test_format_schedule_diff_renders_sections():
     assert "120 mins" in diff_output
 
 
+def test_format_schedule_diff_with_existing_events():
+    start = datetime(2026, 11, 6, 9, 0, tzinfo=TZ)
+    end = datetime(2026, 11, 6, 10, 0, tzinfo=TZ)
+    task = make_mock_task("Report Writing", 60)
+    existing = [
+        CalendarEvent(
+            id="ev1",
+            summary="Team Standup",
+            start=start,
+            end=end,
+        )
+    ]
+    plan = SchedulePlan(
+        placed_tasks=[
+            PlacedTask(task=task, start=end, end=end + timedelta(hours=1), priority_score=7.0)
+        ],
+        unplaced_tasks=[],
+        remaining_slots=[],
+        existing_events=existing,
+    )
+
+    diff_output = format_schedule_diff(plan)
+    assert "[ SCHEDULE PLAN (CALENDAR & PLACED TASKS) ]" in diff_output
+    assert "Team Standup" in diff_output
+    assert "Report Writing" in diff_output
+    assert "Calendar" in diff_output
+    assert "Placed" in diff_output
+    assert "60m" in diff_output
+
+
 def test_autonomous_scheduler_generate_plan_with_existing_events():
     scheduler = AutonomousScheduler()
 

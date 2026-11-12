@@ -66,6 +66,11 @@ data/export/
 # Logs
 *.log
 
+# Notes / Logseq
+logseq/
+journals/
+pages/
+
 # OS clutter
 .DS_Store
 Thumbs.db

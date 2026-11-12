@@ -75,3 +75,32 @@ def test_sanitize_task_anchors_12am_confusion_and_pm_shift():
     assert sanitized.start.dateTime == "2026-11-09T22:45"
     assert sanitized.end.dateTime == "2026-11-10T00:15"
 
+
+def test_all_day_evaluative_anchors_prompt_instructions():
+    from src.agent.prompt_templates import NOTES_EXTRACTION_PROMPT_TEMPLATE, SCORING_PROMPT_TEMPLATE
+    assert "00:00:00" in NOTES_EXTRACTION_PROMPT_TEMPLATE
+    assert "23:59:59" in NOTES_EXTRACTION_PROMPT_TEMPLATE
+    assert "00:00:00" in SCORING_PROMPT_TEMPLATE
+    assert "23:59:59" in SCORING_PROMPT_TEMPLATE
+
+
+def test_sanitize_task_anchors_all_day_milestone():
+    task = ScoredTask(
+        title="krd-quiz on 17th oct",
+        event_type=EventType.EVALUATIVE,
+        start=DateTimeAnchor(dateTime="2026-10-17T00:00:00"),
+        end=DateTimeAnchor(dateTime="2026-10-17T23:59:59"),
+        estimated_duration=60,
+        importance=5,
+        urgency=4,
+        is_movable=True,
+        priority_category=PriorityCategory.URGENT,
+        scoring_rationale="Evaluative quiz for full day.",
+    )
+    sanitized = sanitize_task_anchors(task, reference_now=dt.datetime(2026, 10, 17, 10, 0))
+    # Full day boundaries must be preserved without distortion
+    assert sanitized.start.dateTime == "2026-10-17T00:00:00"
+    assert sanitized.end.dateTime == "2026-10-17T23:59:59"
+
+
+
